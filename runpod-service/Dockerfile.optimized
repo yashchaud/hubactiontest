@@ -106,6 +106,12 @@ RUN pip3 install --no-cache-dir \
     psutil==5.9.8
 
 # ==============================================================================
+# CRITICAL FIX: Force downgrade NumPy to 1.x (TensorFlow incompatible with 2.x)
+# ==============================================================================
+# Some packages above may have upgraded numpy to 2.x, force it back down
+RUN pip3 install --force-reinstall --no-cache-dir "numpy<2"
+
+# ==============================================================================
 # Pre-download ML models (DISABLED - downloads at runtime instead)
 # ==============================================================================
 # Note: Model downloads during Docker build are unreliable (network issues, timeouts)
