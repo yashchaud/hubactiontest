@@ -7,6 +7,7 @@ import { WebhookReceiver } from 'livekit-server-sdk';
 import roomManager from './roomManager.js';
 import { preProcessor } from './processors/preProcessor.js';
 import { postProcessor } from './processors/postProcessor.js';
+import processingBridge from './services/processingBridge.js';
 
 const webhookReceiver = new WebhookReceiver(
   process.env.LIVEKIT_API_KEY,
@@ -197,6 +198,27 @@ async function handleTrackPublished(event) {
 
   // Process track publication (e.g., start recording, analytics)
   await preProcessor.processTrackPublished(roomName, trackInfo);
+
+  // Start server-side track processing for video tracks
+  // Only process tracks from broadcaster (camera or screen share)
+  if (track.type === 'VIDEO' && participant.identity.includes('broadcaster')) {
+    console.log(`[Webhook] Starting server-side processing for broadcaster video track in ${roomName}`);
+
+    try {
+      const result = await processingBridge.startTrackProcessing(roomName, trackInfo);
+
+      if (result.success) {
+        console.log(`[Webhook] Track processing started successfully:`, {
+          roomName,
+          egressId: result.egressId
+        });
+      } else {
+        console.warn(`[Webhook] Failed to start track processing:`, result.error);
+      }
+    } catch (error) {
+      console.error(`[Webhook] Error starting track processing:`, error);
+    }
+  }
 }
 
 /**

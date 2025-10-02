@@ -4,9 +4,10 @@
  * Handles frame extraction, processing, and reinjection
  */
 
-import { EgressClient, IngressClient } from 'livekit-server-sdk';
+import { EgressClient, IngressClient, AccessToken } from 'livekit-server-sdk';
 import { EventEmitter } from 'events';
 import censorshipProcessor from '../processors/contentCensorshipProcessor.js';
+import frameExtractor from './frameExtractor.js';
 import axios from 'axios';
 
 const LIVEKIT_HOST = process.env.LIVEKIT_WS_URL?.replace('wss://', 'https://') || 'https://localhost';
@@ -32,7 +33,7 @@ class ProcessingBridge extends EventEmitter {
 
   /**
    * Start processing for a stream
-   * Initializes censorship session for WebRTC-based broadcasting
+   * Initializes censorship session and starts server-side frame extraction
    */
   async startProcessing(roomName, censorshipConfig = {}) {
     if (this.activeStreams.has(roomName)) {
@@ -66,13 +67,30 @@ class ProcessingBridge extends EventEmitter {
         startedAt: new Date(),
         frameCount: 0,
         detectionCount: 0,
-        lastProcessed: null
+        lastProcessed: null,
+        egressId: null,
+        trackProcessingStarted: false
       };
 
       this.activeStreams.set(roomName, streamInfo);
 
       console.log(`[ProcessingBridge] Processing started for ${roomName}`);
       console.log(`  - Censorship Session: ${censorshipResult.sessionId}`);
+
+      // Listen for frame extractor events
+      frameExtractor.on('detection', (data) => {
+        if (data.roomName === roomName) {
+          streamInfo.detectionCount += data.detections.length;
+          this.emit('detection', data);
+        }
+      });
+
+      frameExtractor.on('frame:extracted', (data) => {
+        if (data.roomName === roomName) {
+          streamInfo.frameCount = data.frameCount;
+          streamInfo.lastProcessed = new Date();
+        }
+      });
 
       this.emit('processing:started', streamInfo);
 
@@ -85,6 +103,62 @@ class ProcessingBridge extends EventEmitter {
     } catch (error) {
       console.error('[ProcessingBridge] Error starting processing:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Start track processing when broadcaster publishes video
+   * Called from webhooks when video track is published
+   */
+  async startTrackProcessing(roomName, trackInfo) {
+    const streamInfo = this.activeStreams.get(roomName);
+
+    if (!streamInfo) {
+      console.warn(`[ProcessingBridge] No active processing for ${roomName}, cannot start track processing`);
+      return { success: false, error: 'No active processing session' };
+    }
+
+    if (streamInfo.trackProcessingStarted) {
+      console.log(`[ProcessingBridge] Track processing already started for ${roomName}`);
+      return { success: true, alreadyStarted: true };
+    }
+
+    try {
+      console.log(`[ProcessingBridge] Starting track processing for ${roomName}`);
+      console.log(`  - Track SID: ${trackInfo.sid}`);
+      console.log(`  - Track type: ${trackInfo.type}`);
+      console.log(`  - Track source: ${trackInfo.source}`);
+
+      // Start frame extraction using Track Egress
+      const extractionResult = await frameExtractor.startExtraction(
+        roomName,
+        trackInfo.sid,
+        streamInfo.censorshipSessionId
+      );
+
+      streamInfo.trackProcessingStarted = true;
+      streamInfo.egressId = extractionResult.egressId;
+
+      console.log(`[ProcessingBridge] Track processing started for ${roomName}`);
+      console.log(`  - Egress ID: ${extractionResult.egressId}`);
+
+      this.emit('track:processing:started', {
+        roomName,
+        trackSid: trackInfo.sid,
+        egressId: extractionResult.egressId
+      });
+
+      return {
+        success: true,
+        egressId: extractionResult.egressId
+      };
+
+    } catch (error) {
+      console.error(`[ProcessingBridge] Error starting track processing for ${roomName}:`, error);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
 
@@ -229,6 +303,16 @@ class ProcessingBridge extends EventEmitter {
     try {
       console.log(`[ProcessingBridge] Stopping processing for ${roomName}`);
 
+      // Stop frame extraction if it was started
+      if (streamInfo.trackProcessingStarted) {
+        try {
+          await frameExtractor.stopExtraction(roomName);
+          console.log(`[ProcessingBridge] Stopped frame extraction for ${roomName}`);
+        } catch (err) {
+          console.error(`[ProcessingBridge] Error stopping frame extraction:`, err);
+        }
+      }
+
       // End censorship session
       await censorshipProcessor.endCensorship(roomName);
 
@@ -240,7 +324,8 @@ class ProcessingBridge extends EventEmitter {
         detectionCount: streamInfo.detectionCount,
         detectionRate: streamInfo.frameCount > 0
           ? ((streamInfo.detectionCount / streamInfo.frameCount) * 100).toFixed(2) + '%'
-          : '0%'
+          : '0%',
+        egressId: streamInfo.egressId
       };
 
       this.activeStreams.delete(roomName);

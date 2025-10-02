@@ -9,7 +9,7 @@ aiofiles==23.2.1
 # Computer Vision and ML
 opencv-python-headless==4.9.0.80
 opencv-contrib-python-headless==4.9.0.80
-numpy==1.26.3
+numpy>=1.26.0,<2.0.0
 pillow==10.2.0
 
 # TensorFlow and GPU acceleration

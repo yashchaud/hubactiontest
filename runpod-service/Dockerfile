@@ -29,7 +29,9 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt && \
+    # Force NumPy to stay < 2.0 for TensorFlow compatibility
+    pip3 install --force-reinstall --no-cache-dir "numpy>=1.26.0,<2.0.0"
 
 # Copy application code
 COPY . .
