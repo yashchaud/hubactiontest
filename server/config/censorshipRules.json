@@ -1,0 +1,112 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2025-10-01T00:00:00.000Z",
+  "global": {
+    "enabled": true,
+    "frameSampleRate": 1,
+    "confidenceThresholds": {
+      "text": 0.7,
+      "nsfw": 0.85,
+      "audio": 0.8
+    }
+  },
+  "text": {
+    "enabled": true,
+    "profanityList": [
+      "fuck",
+      "shit",
+      "damn",
+      "ass",
+      "bitch",
+      "bastard",
+      "cunt",
+      "dick",
+      "pussy",
+      "cock"
+    ],
+    "whitelist": [
+      "Scunthorpe",
+      "assassin",
+      "classic"
+    ],
+    "caseSensitive": false,
+    "detectInImages": true
+  },
+  "nsfw": {
+    "enabled": true,
+    "categories": {
+      "EXPOSED_GENITALIA_F": {
+        "enabled": true,
+        "censorshipLevel": "critical",
+        "blurMethod": "black_box"
+      },
+      "EXPOSED_GENITALIA_M": {
+        "enabled": true,
+        "censorshipLevel": "critical",
+        "blurMethod": "black_box"
+      },
+      "EXPOSED_BREAST_F": {
+        "enabled": true,
+        "censorshipLevel": "high",
+        "blurMethod": "pixelate"
+      },
+      "EXPOSED_BUTTOCKS": {
+        "enabled": true,
+        "censorshipLevel": "high",
+        "blurMethod": "blur"
+      },
+      "EXPOSED_ANUS": {
+        "enabled": true,
+        "censorshipLevel": "critical",
+        "blurMethod": "black_box"
+      },
+      "EXPOSED_BREAST_M": {
+        "enabled": false,
+        "censorshipLevel": "medium",
+        "blurMethod": "blur"
+      }
+    }
+  },
+  "audio": {
+    "enabled": true,
+    "profanityList": [
+      "fuck",
+      "shit",
+      "damn",
+      "ass",
+      "bitch",
+      "cunt",
+      "dick",
+      "pussy"
+    ],
+    "bleepDuration": 500,
+    "transcriptionEnabled": true
+  },
+  "tracking": {
+    "enabled": true,
+    "trackerType": "CSRT",
+    "predictionFrames": 3,
+    "maxAge": 30
+  },
+  "blur": {
+    "method": "blur",
+    "kernelSize": 51,
+    "sigma": 25,
+    "padding": 10,
+    "feathering": true
+  },
+  "actions": {
+    "onCriticalDetection": {
+      "enabled": false,
+      "action": "disconnect",
+      "threshold": 3
+    },
+    "onHighDetection": {
+      "enabled": true,
+      "action": "alert",
+      "threshold": 5
+    },
+    "alertWebhook": null
+  },
+  "roomOverrides": {}
+}

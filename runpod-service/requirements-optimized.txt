@@ -1,0 +1,80 @@
+# Optimized requirements for faster Docker builds
+# Split into core (rarely changes) and app (changes often)
+
+# ============================================================================
+# CORE DEPENDENCIES (Layer 1 - Cached, rarely changes)
+# ============================================================================
+
+# FastAPI and server (pinned versions)
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+websockets==12.0
+pydantic==2.5.3
+aiofiles==23.2.1
+
+# ============================================================================
+# ML FRAMEWORKS (Layer 2 - Large, rarely changes)
+# ============================================================================
+
+# TensorFlow GPU-only (saves 1.5GB+ vs full tensorflow)
+tensorflow-gpu==2.15.0
+
+# Remove TensorRT from pip (use NVIDIA's pre-installed version)
+# tensorrt==8.6.1  # Already in CUDA base image
+
+# ONNX Runtime GPU
+onnxruntime-gpu==1.17.0
+
+# ============================================================================
+# COMPUTER VISION (Layer 3 - Medium size)
+# ============================================================================
+
+# OpenCV headless (no GUI dependencies)
+opencv-python-headless==4.9.0.80
+# opencv-contrib-python-headless==4.9.0.80  # Remove if not using contrib modules
+
+# Core numpy and image processing
+numpy==1.26.3
+pillow==10.2.0
+
+# ============================================================================
+# ML MODELS (Layer 4 - Downloads models at install time)
+# ============================================================================
+
+# OCR - Keras-OCR (downloads ~400MB models)
+keras-ocr==0.9.3
+
+# NSFW Detection - NudeNet (downloads ~200MB model)
+nudenet==3.4.2
+
+# Audio - Whisper (downloads models on first use, not at install)
+openai-whisper==20231117
+
+# ============================================================================
+# AUDIO/VIDEO PROCESSING (Layer 5)
+# ============================================================================
+
+soundfile==0.12.1
+librosa==0.10.1
+pydub==0.25.1
+ffmpeg-python==0.2.0
+av==11.0.0
+
+# ============================================================================
+# UTILITIES (Layer 6 - Small, changes rarely)
+# ============================================================================
+
+python-dotenv==1.0.0
+requests==2.31.0
+redis==5.0.1
+
+# Profanity filtering (lightweight)
+better-profanity==0.7.0
+# profanity-check==1.0.3  # Remove if not using (has large dependencies)
+
+# ============================================================================
+# MONITORING (Optional - comment out if not needed)
+# ============================================================================
+
+# psutil  # For health checks with memory monitoring

@@ -1,0 +1,349 @@
+/**
+ * Processing Bridge Service
+ * Connects LiveKit Ingress/Egress to RunPod GPU processing service
+ * Handles frame extraction, processing, and reinjection
+ */
+
+import { EgressClient, IngressClient } from 'livekit-server-sdk';
+import { EventEmitter } from 'events';
+import censorshipProcessor from '../processors/contentCensorshipProcessor.js';
+import axios from 'axios';
+
+const LIVEKIT_HOST = process.env.LIVEKIT_WS_URL?.replace('wss://', 'https://') || 'https://localhost';
+
+const egressClient = new EgressClient(
+  LIVEKIT_HOST,
+  process.env.LIVEKIT_API_KEY,
+  process.env.LIVEKIT_API_SECRET
+);
+
+const ingressClient = new IngressClient(
+  LIVEKIT_HOST,
+  process.env.LIVEKIT_API_KEY,
+  process.env.LIVEKIT_API_SECRET
+);
+
+class ProcessingBridge extends EventEmitter {
+  constructor() {
+    super();
+    this.activeStreams = new Map();
+    console.log('[ProcessingBridge] Initialized');
+  }
+
+  /**
+   * Start processing for a stream
+   * Creates RTMP ingress and sets up processing pipeline
+   */
+  async startProcessing(roomName, censorshipConfig = {}) {
+    if (this.activeStreams.has(roomName)) {
+      throw new Error(`Processing already active for room: ${roomName}`);
+    }
+
+    try {
+      console.log(`[ProcessingBridge] Starting processing for ${roomName}`);
+
+      // Step 1: Create RTMP ingress
+      const ingress = await this._createRTMPIngress(roomName);
+
+      // Step 2: Initialize censorship session
+      const censorshipResult = await censorshipProcessor.initializeCensorship(
+        roomName,
+        censorshipConfig
+      );
+
+      if (!censorshipResult.success) {
+        throw new Error(`Failed to initialize censorship: ${censorshipResult.error}`);
+      }
+
+      // Step 3: Start egress to extract frames (track egress for processing)
+      const egress = await this._startTrackEgress(roomName);
+
+      // Store stream info
+      const streamInfo = {
+        roomName,
+        ingress,
+        egress,
+        censorshipSessionId: censorshipResult.sessionId,
+        startedAt: new Date(),
+        frameCount: 0,
+        detectionCount: 0,
+        lastProcessed: null
+      };
+
+      this.activeStreams.set(roomName, streamInfo);
+
+      console.log(`[ProcessingBridge] Processing started for ${roomName}`);
+      console.log(`  - RTMP URL: ${ingress.url}`);
+      console.log(`  - Stream Key: ${ingress.streamKey}`);
+      console.log(`  - Censorship Session: ${censorshipResult.sessionId}`);
+
+      this.emit('processing:started', streamInfo);
+
+      return {
+        success: true,
+        rtmpUrl: ingress.url,
+        streamKey: ingress.streamKey,
+        ingressId: ingress.ingressId,
+        censorshipSessionId: censorshipResult.sessionId
+      };
+
+    } catch (error) {
+      console.error('[ProcessingBridge] Error starting processing:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create RTMP ingress for broadcaster to stream to
+   */
+  async _createRTMPIngress(roomName) {
+    try {
+      // Create RTMP ingress
+      const ingress = await ingressClient.createIngress({
+        inputType: 'RTMP_INPUT',
+        name: `censorship-${roomName}`,
+        roomName: roomName,
+        participantIdentity: `broadcaster-${roomName}`,
+        participantName: 'Broadcaster'
+      });
+
+      console.log(`[ProcessingBridge] Created RTMP ingress: ${ingress.ingressId}`);
+
+      return {
+        ingressId: ingress.ingressId,
+        url: ingress.url,
+        streamKey: ingress.streamKey
+      };
+
+    } catch (error) {
+      console.error('[ProcessingBridge] Error creating RTMP ingress:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Start track egress to extract frames for processing
+   */
+  async _startTrackEgress(roomName) {
+    try {
+      // Start track egress to get raw video frames
+      // This will be used to extract frames and send to RunPod
+      const egress = await egressClient.startTrackEgress(roomName, {
+        // Track egress configuration
+        // For now, we'll use track composite to get frames
+      });
+
+      console.log(`[ProcessingBridge] Started track egress: ${egress.egressId}`);
+
+      return {
+        egressId: egress.egressId,
+        status: egress.status
+      };
+
+    } catch (error) {
+      console.error('[ProcessingBridge] Error starting track egress:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process a frame from the stream
+   * Called periodically to extract and process frames
+   */
+  async processFrame(roomName, frameBuffer) {
+    const streamInfo = this.activeStreams.get(roomName);
+
+    if (!streamInfo) {
+      throw new Error(`No active processing for room: ${roomName}`);
+    }
+
+    try {
+      // Send frame to censorship processor
+      const result = await censorshipProcessor.processFrame(roomName, frameBuffer);
+
+      // Update stream stats
+      streamInfo.frameCount++;
+      streamInfo.lastProcessed = new Date();
+
+      if (result.detectionCount > 0) {
+        streamInfo.detectionCount += result.detectionCount;
+
+        this.emit('detection', {
+          roomName,
+          frameId: result.frameId,
+          detections: result.detections,
+          count: result.detectionCount
+        });
+
+        console.log(
+          `[ProcessingBridge] ${roomName}: ${result.detectionCount} detection(s) in frame ${result.frameId}`
+        );
+      }
+
+      return result;
+
+    } catch (error) {
+      console.error('[ProcessingBridge] Error processing frame:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Process audio chunk
+   */
+  async processAudio(roomName, audioBuffer) {
+    const streamInfo = this.activeStreams.get(roomName);
+
+    if (!streamInfo) {
+      throw new Error(`No active processing for room: ${roomName}`);
+    }
+
+    try {
+      const result = await censorshipProcessor.processAudio(roomName, audioBuffer);
+
+      if (result.profanityDetected) {
+        this.emit('audio:profanity', {
+          roomName,
+          detections: result.detections
+        });
+
+        console.log(
+          `[ProcessingBridge] ${roomName}: Audio profanity detected (${result.count} instance(s))`
+        );
+      }
+
+      return result;
+
+    } catch (error) {
+      console.error('[ProcessingBridge] Error processing audio:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Stop processing for a stream
+   */
+  async stopProcessing(roomName) {
+    const streamInfo = this.activeStreams.get(roomName);
+
+    if (!streamInfo) {
+      console.log(`[ProcessingBridge] No active processing for ${roomName}`);
+      return { success: true };
+    }
+
+    try {
+      console.log(`[ProcessingBridge] Stopping processing for ${roomName}`);
+
+      // Stop egress
+      if (streamInfo.egress?.egressId) {
+        await egressClient.stopEgress(streamInfo.egress.egressId);
+      }
+
+      // Delete ingress
+      if (streamInfo.ingress?.ingressId) {
+        await ingressClient.deleteIngress(streamInfo.ingress.ingressId);
+      }
+
+      // End censorship session
+      await censorshipProcessor.endCensorship(roomName);
+
+      // Get final stats
+      const stats = {
+        roomName,
+        duration: Date.now() - streamInfo.startedAt.getTime(),
+        frameCount: streamInfo.frameCount,
+        detectionCount: streamInfo.detectionCount,
+        detectionRate: streamInfo.frameCount > 0
+          ? ((streamInfo.detectionCount / streamInfo.frameCount) * 100).toFixed(2) + '%'
+          : '0%'
+      };
+
+      this.activeStreams.delete(roomName);
+
+      console.log('[ProcessingBridge] Processing stopped:', stats);
+
+      this.emit('processing:stopped', stats);
+
+      return {
+        success: true,
+        stats
+      };
+
+    } catch (error) {
+      console.error('[ProcessingBridge] Error stopping processing:', error);
+
+      // Clean up anyway
+      this.activeStreams.delete(roomName);
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Get processing status for a room
+   */
+  getStatus(roomName) {
+    const streamInfo = this.activeStreams.get(roomName);
+
+    if (!streamInfo) {
+      return null;
+    }
+
+    return {
+      roomName,
+      active: true,
+      rtmpUrl: streamInfo.ingress.url,
+      streamKey: streamInfo.ingress.streamKey,
+      ingressId: streamInfo.ingress.ingressId,
+      egressId: streamInfo.egress?.egressId,
+      censorshipSessionId: streamInfo.censorshipSessionId,
+      startedAt: streamInfo.startedAt,
+      frameCount: streamInfo.frameCount,
+      detectionCount: streamInfo.detectionCount,
+      lastProcessed: streamInfo.lastProcessed
+    };
+  }
+
+  /**
+   * Get all active processing streams
+   */
+  getActiveStreams() {
+    return Array.from(this.activeStreams.keys()).map(roomName =>
+      this.getStatus(roomName)
+    );
+  }
+
+  /**
+   * Update censorship configuration for a room
+   */
+  async updateCensorshipConfig(roomName, newConfig) {
+    const streamInfo = this.activeStreams.get(roomName);
+
+    if (!streamInfo) {
+      throw new Error(`No active processing for room: ${roomName}`);
+    }
+
+    try {
+      const result = await censorshipProcessor.updateConfig(roomName, newConfig);
+
+      if (result.success) {
+        streamInfo.censorshipSessionId = result.sessionId;
+        console.log(`[ProcessingBridge] Updated censorship config for ${roomName}`);
+      }
+
+      return result;
+
+    } catch (error) {
+      console.error('[ProcessingBridge] Error updating censorship config:', error);
+      throw error;
+    }
+  }
+}
+
+// Singleton instance
+const processingBridge = new ProcessingBridge();
+
+export default processingBridge;
