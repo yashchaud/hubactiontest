@@ -1,6 +1,10 @@
+// IMPORTANT: Load environment variables FIRST before importing other modules
+import dotenv from 'dotenv';
+dotenv.config();
+
+// Now import other modules (they will read the correct env vars)
 import express from 'express';
 import { AccessToken } from 'livekit-server-sdk';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import { handleWebhook } from './webhooks.js';
 import streamManager from './streamManager.js';
@@ -9,8 +13,6 @@ import censorshipRulesService from './services/censorshipRulesService.js';
 import censorshipProcessor from './processors/contentCensorshipProcessor.js';
 import processingBridge from './services/processingBridge.js';
 import processorOrchestrator from './processors/processorOrchestrator.js';
-
-dotenv.config();
 
 const app = express();
 app.use(cors());

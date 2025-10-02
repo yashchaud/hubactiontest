@@ -3,6 +3,9 @@
  * Coordinates with RunPod GPU service for real-time content censorship
  */
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 import axios from 'axios';
 import FormData from 'form-data';
 
