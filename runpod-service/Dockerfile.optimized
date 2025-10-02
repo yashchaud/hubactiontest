@@ -106,11 +106,14 @@ RUN pip3 install --no-cache-dir \
     psutil==5.9.8
 
 # ==============================================================================
-# Pre-download ML models (happens once during build, not at runtime!)
+# Pre-download ML models (DISABLED - downloads at runtime instead)
 # ==============================================================================
-RUN python3 -c "import keras_ocr; keras_ocr.pipeline.Pipeline()" && \
-    python3 -c "from nudenet import NudeDetector; NudeDetector()" && \
-    echo "Models pre-downloaded successfully!"
+# Note: Model downloads during Docker build are unreliable (network issues, timeouts)
+# Models will auto-download on first API request (~2-3 minutes first time)
+# They are cached in the container after first download
+# RUN python3 -c "import keras_ocr; keras_ocr.pipeline.Pipeline()" && \
+#     python3 -c "from nudenet import NudeDetector; NudeDetector()" && \
+#     echo "Models pre-downloaded successfully!"
 
 # ==============================================================================
 # STAGE 2: Runtime - Slim final image
@@ -149,9 +152,9 @@ RUN rm -f /etc/apt/sources.list.d/cuda*.list && \
 COPY --from=builder /usr/local/lib/python3.10/dist-packages /usr/local/lib/python3.10/dist-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy pre-downloaded models from builder
-COPY --from=builder /root/.keras-ocr /root/.keras-ocr
-COPY --from=builder /root/.NudeNet /root/.NudeNet
+# Copy pre-downloaded models from builder (DISABLED - models download at runtime)
+# COPY --from=builder /root/.keras-ocr /root/.keras-ocr
+# COPY --from=builder /root/.NudeNet /root/.NudeNet
 
 # Set working directory
 WORKDIR /app
@@ -169,8 +172,8 @@ USER nobody
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+# Health check (extended start-period for model downloads on first boot)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
     CMD python3 -c "import requests; requests.get('http://localhost:8000/health', timeout=5)" || exit 1
 
 # Run application
