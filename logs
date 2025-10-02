@@ -1,0 +1,286 @@
+2025-10-02T08:00:25.724719311Z ==========
+2025-10-02T08:00:25.724724931Z == CUDA ==
+2025-10-02T08:00:25.724729441Z ==========
+2025-10-02T08:00:25.724738342Z CUDA Version 11.8.0
+2025-10-02T08:00:25.729978431Z Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+2025-10-02T08:00:25.729992931Z This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+2025-10-02T08:00:25.730000042Z By pulling and using the container, you accept the terms and conditions of this license:
+2025-10-02T08:00:25.730006542Z https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+2025-10-02T08:00:25.730020612Z A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+2025-10-02T08:00:26.535950574Z INFO:     Started server process [19]
+2025-10-02T08:00:26.535981415Z INFO:     Waiting for application startup.
+2025-10-02T08:00:26.536134880Z 2025-10-02 08:00:26,536 - main - INFO - Initializing ML models...
+2025-10-02T08:00:26.825896960Z 2025-10-02 08:00:26.825657: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2025-10-02T08:00:26.825937411Z 2025-10-02 08:00:26.825706: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2025-10-02T08:00:26.827300628Z 2025-10-02 08:00:26.827150: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2025-10-02T08:00:26.835146886Z 2025-10-02 08:00:26.834991: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+2025-10-02T08:00:26.835173997Z To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2025-10-02T08:00:26.840962855Z A module that was compiled using NumPy 1.x cannot be run in
+2025-10-02T08:00:26.840969015Z NumPy 2.2.6 as it may crash. To support both 1.x and 2.x
+2025-10-02T08:00:26.840974846Z versions of NumPy, modules must be compiled with NumPy 2.0.
+2025-10-02T08:00:26.840980326Z Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+2025-10-02T08:00:26.840992076Z If you are a user of the module, the easiest solution will be to
+2025-10-02T08:00:26.840997456Z downgrade to 'numpy<2' or try to upgrade the affected module.
+2025-10-02T08:00:26.841002846Z We expect that some modules will need time to support NumPy 2.
+2025-10-02T08:00:26.841013347Z Traceback (most recent call last):  File "/usr/local/bin/uvicorn", line 7, in <module>
+2025-10-02T08:00:26.841019057Z     sys.exit(main())
+2025-10-02T08:00:26.841024597Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 1462, in __call__
+2025-10-02T08:00:26.841029917Z     return self.main(*args, **kwargs)
+2025-10-02T08:00:26.841035608Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 1383, in main
+2025-10-02T08:00:26.841040928Z     rv = self.invoke(ctx)
+2025-10-02T08:00:26.841046408Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 1246, in invoke
+2025-10-02T08:00:26.841051708Z     return ctx.invoke(self.callback, **ctx.params)
+2025-10-02T08:00:26.841056978Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 814, in invoke
+2025-10-02T08:00:26.841062399Z     return callback(*args, **kwargs)
+2025-10-02T08:00:26.841067629Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/main.py", line 418, in main
+2025-10-02T08:00:26.841072909Z     run(
+2025-10-02T08:00:26.841078509Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/main.py", line 587, in run
+2025-10-02T08:00:26.841083949Z     server.run()
+2025-10-02T08:00:26.841112340Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/server.py", line 62, in run
+2025-10-02T08:00:26.841118230Z     return asyncio.run(self.serve(sockets=sockets))
+2025-10-02T08:00:26.841123541Z   File "/usr/lib/python3.10/asyncio/runners.py", line 44, in run
+2025-10-02T08:00:26.841128941Z     return loop.run_until_complete(main)
+2025-10-02T08:00:26.841134291Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/lifespan/on.py", line 86, in main
+2025-10-02T08:00:26.841139711Z     await app(scope, self.receive, self.send)
+2025-10-02T08:00:26.841145081Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+2025-10-02T08:00:26.841150792Z     return await self.app(scope, receive, send)
+2025-10-02T08:00:26.841156142Z   File "/usr/local/lib/python3.10/dist-packages/fastapi/applications.py", line 1054, in __call__
+2025-10-02T08:00:26.841161502Z     await super().__call__(scope, receive, send)
+2025-10-02T08:00:26.841166802Z   File "/usr/local/lib/python3.10/dist-packages/starlette/applications.py", line 123, in __call__
+2025-10-02T08:00:26.841173342Z     await self.middleware_stack(scope, receive, send)
+2025-10-02T08:00:26.841178942Z   File "/usr/local/lib/python3.10/dist-packages/starlette/middleware/errors.py", line 151, in __call__
+2025-10-02T08:00:26.841184283Z     await self.app(scope, receive, send)
+2025-10-02T08:00:26.841189593Z   File "/usr/local/lib/python3.10/dist-packages/starlette/middleware/cors.py", line 75, in __call__
+2025-10-02T08:00:26.841194933Z     await self.app(scope, receive, send)
+2025-10-02T08:00:26.841200243Z   File "/usr/local/lib/python3.10/dist-packages/starlette/middleware/exceptions.py", line 48, in __call__
+2025-10-02T08:00:26.841205573Z     await self.app(scope, receive, send)
+2025-10-02T08:00:26.841210894Z   File "/usr/local/lib/python3.10/dist-packages/starlette/routing.py", line 762, in __call__
+2025-10-02T08:00:26.841216274Z     await self.middleware_stack(scope, receive, send)
+2025-10-02T08:00:26.841221614Z   File "/usr/local/lib/python3.10/dist-packages/starlette/routing.py", line 771, in app
+2025-10-02T08:00:26.841226914Z     await self.lifespan(scope, receive, send)
+2025-10-02T08:00:26.841232214Z   File "/usr/local/lib/python3.10/dist-packages/starlette/routing.py", line 738, in lifespan
+2025-10-02T08:00:26.841237504Z     async with self.lifespan_context(app) as maybe_state:
+2025-10-02T08:00:26.841242795Z   File "/usr/lib/python3.10/contextlib.py", line 199, in __aenter__
+2025-10-02T08:00:26.841248455Z     return await anext(self.gen)
+2025-10-02T08:00:26.841253895Z   File "/app/main.py", line 92, in lifespan
+2025-10-02T08:00:26.841259285Z     text_detector = TextDetector()
+2025-10-02T08:00:26.841264685Z   File "/app/processors/text_detector.py", line 22, in __init__
+2025-10-02T08:00:26.841270056Z     self._load_model()
+2025-10-02T08:00:26.841275446Z   File "/app/processors/text_detector.py", line 28, in _load_model
+2025-10-02T08:00:26.841280796Z     import keras_ocr
+2025-10-02T08:00:26.841286166Z   File "/usr/local/lib/python3.10/dist-packages/keras_ocr/__init__.py", line 1, in <module>
+2025-10-02T08:00:26.841291466Z     from . import (
+2025-10-02T08:00:26.841296897Z   File "/usr/local/lib/python3.10/dist-packages/keras_ocr/detection.py", line 27, in <module>
+2025-10-02T08:00:26.841302257Z     import tensorflow as tf
+2025-10-02T08:00:26.841307677Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/__init__.py", line 48, in <module>
+2025-10-02T08:00:26.841312997Z     from tensorflow._api.v2 import __internal__
+2025-10-02T08:00:26.841318337Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/_api/v2/__internal__/__init__.py", line 8, in <module>
+2025-10-02T08:00:26.841323847Z     from tensorflow._api.v2.__internal__ import autograph
+2025-10-02T08:00:26.841329188Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/_api/v2/__internal__/autograph/__init__.py", line 8, in <module>
+2025-10-02T08:00:26.841334508Z     from tensorflow.python.autograph.core.ag_ctx import control_status_ctx # line: 34
+2025-10-02T08:00:26.841340328Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/autograph/core/ag_ctx.py", line 21, in <module>
+2025-10-02T08:00:26.841345788Z     from tensorflow.python.autograph.utils import ag_logging
+2025-10-02T08:00:26.841360209Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/autograph/utils/__init__.py", line 17, in <module>
+2025-10-02T08:00:26.841365869Z     from tensorflow.python.autograph.utils.context_managers import control_dependency_on_returns
+2025-10-02T08:00:26.841371389Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/autograph/utils/context_managers.py", line 19, in <module>
+2025-10-02T08:00:26.841376769Z     from tensorflow.python.framework import ops
+2025-10-02T08:00:26.841382099Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/framework/ops.py", line 41, in <module>
+2025-10-02T08:00:26.841387440Z     from tensorflow.python import pywrap_tfe
+2025-10-02T08:00:26.841392760Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/pywrap_tfe.py", line 25, in <module>
+2025-10-02T08:00:26.841398120Z     from tensorflow.python._pywrap_tfe import *
+2025-10-02T08:00:26.841403480Z AttributeError: _ARRAY_API not found
+2025-10-02T08:00:26.844838778Z A module that was compiled using NumPy 1.x cannot be run in
+2025-10-02T08:00:26.844845818Z NumPy 2.2.6 as it may crash. To support both 1.x and 2.x
+2025-10-02T08:00:26.844851488Z versions of NumPy, modules must be compiled with NumPy 2.0.
+2025-10-02T08:00:26.844856938Z Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+2025-10-02T08:00:26.844868839Z If you are a user of the module, the easiest solution will be to
+2025-10-02T08:00:26.844874349Z downgrade to 'numpy<2' or try to upgrade the affected module.
+2025-10-02T08:00:26.844879729Z We expect that some modules will need time to support NumPy 2.
+2025-10-02T08:00:26.844890459Z Traceback (most recent call last):  File "/usr/local/bin/uvicorn", line 7, in <module>
+2025-10-02T08:00:26.844896430Z     sys.exit(main())
+2025-10-02T08:00:26.844902420Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 1462, in __call__
+2025-10-02T08:00:26.844907900Z     return self.main(*args, **kwargs)
+2025-10-02T08:00:26.844913690Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 1383, in main
+2025-10-02T08:00:26.844919220Z     rv = self.invoke(ctx)
+2025-10-02T08:00:26.844925201Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 1246, in invoke
+2025-10-02T08:00:26.844930591Z     return ctx.invoke(self.callback, **ctx.params)
+2025-10-02T08:00:26.844935911Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 814, in invoke
+2025-10-02T08:00:26.844941311Z     return callback(*args, **kwargs)
+2025-10-02T08:00:26.844946631Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/main.py", line 418, in main
+2025-10-02T08:00:26.844952002Z     run(
+2025-10-02T08:00:26.844957532Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/main.py", line 587, in run
+2025-10-02T08:00:26.844962942Z     server.run()
+2025-10-02T08:00:26.844968572Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/server.py", line 62, in run
+2025-10-02T08:00:26.844973942Z     return asyncio.run(self.serve(sockets=sockets))
+2025-10-02T08:00:26.844979272Z   File "/usr/lib/python3.10/asyncio/runners.py", line 44, in run
+2025-10-02T08:00:26.844984673Z     return loop.run_until_complete(main)
+2025-10-02T08:00:26.844990103Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/lifespan/on.py", line 86, in main
+2025-10-02T08:00:26.844996363Z     await app(scope, self.receive, self.send)
+2025-10-02T08:00:26.845001843Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+2025-10-02T08:00:26.845007683Z     return await self.app(scope, receive, send)
+2025-10-02T08:00:26.845013034Z   File "/usr/local/lib/python3.10/dist-packages/fastapi/applications.py", line 1054, in __call__
+2025-10-02T08:00:26.845018414Z     await super().__call__(scope, receive, send)
+2025-10-02T08:00:26.845023784Z   File "/usr/local/lib/python3.10/dist-packages/starlette/applications.py", line 123, in __call__
+2025-10-02T08:00:26.845031164Z     await self.middleware_stack(scope, receive, send)
+2025-10-02T08:00:26.845036664Z   File "/usr/local/lib/python3.10/dist-packages/starlette/middleware/errors.py", line 151, in __call__
+2025-10-02T08:00:26.845061845Z     await self.app(scope, receive, send)
+2025-10-02T08:00:26.845067536Z   File "/usr/local/lib/python3.10/dist-packages/starlette/middleware/cors.py", line 75, in __call__
+2025-10-02T08:00:26.845072876Z     await self.app(scope, receive, send)
+2025-10-02T08:00:26.845078186Z   File "/usr/local/lib/python3.10/dist-packages/starlette/middleware/exceptions.py", line 48, in __call__
+2025-10-02T08:00:26.845083536Z     await self.app(scope, receive, send)
+2025-10-02T08:00:26.845088846Z   File "/usr/local/lib/python3.10/dist-packages/starlette/routing.py", line 762, in __call__
+2025-10-02T08:00:26.845094196Z     await self.middleware_stack(scope, receive, send)
+2025-10-02T08:00:26.845099507Z   File "/usr/local/lib/python3.10/dist-packages/starlette/routing.py", line 771, in app
+2025-10-02T08:00:26.845104877Z     await self.lifespan(scope, receive, send)
+2025-10-02T08:00:26.845110207Z   File "/usr/local/lib/python3.10/dist-packages/starlette/routing.py", line 738, in lifespan
+2025-10-02T08:00:26.845115537Z     async with self.lifespan_context(app) as maybe_state:
+2025-10-02T08:00:26.845120877Z   File "/usr/lib/python3.10/contextlib.py", line 199, in __aenter__
+2025-10-02T08:00:26.845126338Z     return await anext(self.gen)
+2025-10-02T08:00:26.845131748Z   File "/app/main.py", line 92, in lifespan
+2025-10-02T08:00:26.845137048Z     text_detector = TextDetector()
+2025-10-02T08:00:26.845142488Z   File "/app/processors/text_detector.py", line 22, in __init__
+2025-10-02T08:00:26.845147888Z     self._load_model()
+2025-10-02T08:00:26.845153258Z   File "/app/processors/text_detector.py", line 28, in _load_model
+2025-10-02T08:00:26.845158659Z     import keras_ocr
+2025-10-02T08:00:26.845163989Z   File "/usr/local/lib/python3.10/dist-packages/keras_ocr/__init__.py", line 1, in <module>
+2025-10-02T08:00:26.845169309Z     from . import (
+2025-10-02T08:00:26.845174709Z   File "/usr/local/lib/python3.10/dist-packages/keras_ocr/detection.py", line 27, in <module>
+2025-10-02T08:00:26.845180049Z     import tensorflow as tf
+2025-10-02T08:00:26.845185460Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/__init__.py", line 48, in <module>
+2025-10-02T08:00:26.845190820Z     from tensorflow._api.v2 import __internal__
+2025-10-02T08:00:26.845196130Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/_api/v2/__internal__/__init__.py", line 8, in <module>
+2025-10-02T08:00:26.845201880Z     from tensorflow._api.v2.__internal__ import autograph
+2025-10-02T08:00:26.845207210Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/_api/v2/__internal__/autograph/__init__.py", line 8, in <module>
+2025-10-02T08:00:26.845212580Z     from tensorflow.python.autograph.core.ag_ctx import control_status_ctx # line: 34
+2025-10-02T08:00:26.845222611Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/autograph/core/ag_ctx.py", line 21, in <module>
+2025-10-02T08:00:26.845228241Z     from tensorflow.python.autograph.utils import ag_logging
+2025-10-02T08:00:26.845233731Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/autograph/utils/__init__.py", line 17, in <module>
+2025-10-02T08:00:26.845239271Z     from tensorflow.python.autograph.utils.context_managers import control_dependency_on_returns
+2025-10-02T08:00:26.845244762Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/autograph/utils/context_managers.py", line 19, in <module>
+2025-10-02T08:00:26.845250162Z     from tensorflow.python.framework import ops
+2025-10-02T08:00:26.845258072Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/framework/ops.py", line 44, in <module>
+2025-10-02T08:00:26.845263372Z     from tensorflow.python.client import pywrap_tf_session
+2025-10-02T08:00:26.845270452Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/client/pywrap_tf_session.py", line 19, in <module>
+2025-10-02T08:00:26.845275943Z     from tensorflow.python.client._pywrap_tf_session import *
+2025-10-02T08:00:26.845281423Z AttributeError: _ARRAY_API not found
+2025-10-02T08:00:26.857104517Z A module that was compiled using NumPy 1.x cannot be run in
+2025-10-02T08:00:26.857135428Z NumPy 2.2.6 as it may crash. To support both 1.x and 2.x
+2025-10-02T08:00:26.857141358Z versions of NumPy, modules must be compiled with NumPy 2.0.
+2025-10-02T08:00:26.857146789Z Some module may need to rebuild instead e.g. with 'pybind11>=2.12'.
+2025-10-02T08:00:26.857157419Z If you are a user of the module, the easiest solution will be to
+2025-10-02T08:00:26.857162849Z downgrade to 'numpy<2' or try to upgrade the affected module.
+2025-10-02T08:00:26.857168029Z We expect that some modules will need time to support NumPy 2.
+2025-10-02T08:00:26.857178170Z Traceback (most recent call last):  File "/usr/local/bin/uvicorn", line 7, in <module>
+2025-10-02T08:00:26.857183610Z     sys.exit(main())
+2025-10-02T08:00:26.857189020Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 1462, in __call__
+2025-10-02T08:00:26.857194060Z     return self.main(*args, **kwargs)
+2025-10-02T08:00:26.857199330Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 1383, in main
+2025-10-02T08:00:26.857204431Z     rv = self.invoke(ctx)
+2025-10-02T08:00:26.857209791Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 1246, in invoke
+2025-10-02T08:00:26.857214791Z     return ctx.invoke(self.callback, **ctx.params)
+2025-10-02T08:00:26.857219801Z   File "/usr/local/lib/python3.10/dist-packages/click/core.py", line 814, in invoke
+2025-10-02T08:00:26.857224801Z     return callback(*args, **kwargs)
+2025-10-02T08:00:26.857230012Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/main.py", line 418, in main
+2025-10-02T08:00:26.857235122Z     run(
+2025-10-02T08:00:26.857240492Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/main.py", line 587, in run
+2025-10-02T08:00:26.857245622Z     server.run()
+2025-10-02T08:00:26.857250682Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/server.py", line 62, in run
+2025-10-02T08:00:26.857255992Z     return asyncio.run(self.serve(sockets=sockets))
+2025-10-02T08:00:26.857260993Z   File "/usr/lib/python3.10/asyncio/runners.py", line 44, in run
+2025-10-02T08:00:26.857266043Z     return loop.run_until_complete(main)
+2025-10-02T08:00:26.857271133Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/lifespan/on.py", line 86, in main
+2025-10-02T08:00:26.857276433Z     await app(scope, self.receive, self.send)
+2025-10-02T08:00:26.857281613Z   File "/usr/local/lib/python3.10/dist-packages/uvicorn/middleware/proxy_headers.py", line 84, in __call__
+2025-10-02T08:00:26.857286993Z     return await self.app(scope, receive, send)
+2025-10-02T08:00:26.857292054Z   File "/usr/local/lib/python3.10/dist-packages/fastapi/applications.py", line 1054, in __call__
+2025-10-02T08:00:26.857297134Z     await super().__call__(scope, receive, send)
+2025-10-02T08:00:26.857302124Z   File "/usr/local/lib/python3.10/dist-packages/starlette/applications.py", line 123, in __call__
+2025-10-02T08:00:26.857308074Z     await self.middleware_stack(scope, receive, send)
+2025-10-02T08:00:26.857313264Z   File "/usr/local/lib/python3.10/dist-packages/starlette/middleware/errors.py", line 151, in __call__
+2025-10-02T08:00:26.857318285Z     await self.app(scope, receive, send)
+2025-10-02T08:00:26.857323395Z   File "/usr/local/lib/python3.10/dist-packages/starlette/middleware/cors.py", line 75, in __call__
+2025-10-02T08:00:26.857328665Z     await self.app(scope, receive, send)
+2025-10-02T08:00:26.857333735Z   File "/usr/local/lib/python3.10/dist-packages/starlette/middleware/exceptions.py", line 48, in __call__
+2025-10-02T08:00:26.857339115Z     await self.app(scope, receive, send)
+2025-10-02T08:00:26.857344165Z   File "/usr/local/lib/python3.10/dist-packages/starlette/routing.py", line 762, in __call__
+2025-10-02T08:00:26.857349236Z     await self.middleware_stack(scope, receive, send)
+2025-10-02T08:00:26.857354216Z   File "/usr/local/lib/python3.10/dist-packages/starlette/routing.py", line 771, in app
+2025-10-02T08:00:26.857359206Z     await self.lifespan(scope, receive, send)
+2025-10-02T08:00:26.857364186Z   File "/usr/local/lib/python3.10/dist-packages/starlette/routing.py", line 738, in lifespan
+2025-10-02T08:00:26.857369416Z     async with self.lifespan_context(app) as maybe_state:
+2025-10-02T08:00:26.857382547Z   File "/usr/lib/python3.10/contextlib.py", line 199, in __aenter__
+2025-10-02T08:00:26.857387937Z     return await anext(self.gen)
+2025-10-02T08:00:26.857393057Z   File "/app/main.py", line 92, in lifespan
+2025-10-02T08:00:26.857398087Z     text_detector = TextDetector()
+2025-10-02T08:00:26.857403167Z   File "/app/processors/text_detector.py", line 22, in __init__
+2025-10-02T08:00:26.857408198Z     self._load_model()
+2025-10-02T08:00:26.857413338Z   File "/app/processors/text_detector.py", line 28, in _load_model
+2025-10-02T08:00:26.857420958Z     import keras_ocr
+2025-10-02T08:00:26.857426138Z   File "/usr/local/lib/python3.10/dist-packages/keras_ocr/__init__.py", line 1, in <module>
+2025-10-02T08:00:26.857431248Z     from . import (
+2025-10-02T08:00:26.857436419Z   File "/usr/local/lib/python3.10/dist-packages/keras_ocr/detection.py", line 27, in <module>
+2025-10-02T08:00:26.857441539Z     import tensorflow as tf
+2025-10-02T08:00:26.857446589Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/__init__.py", line 48, in <module>
+2025-10-02T08:00:26.857451839Z     from tensorflow._api.v2 import __internal__
+2025-10-02T08:00:26.857456979Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/_api/v2/__internal__/__init__.py", line 8, in <module>
+2025-10-02T08:00:26.857462349Z     from tensorflow._api.v2.__internal__ import autograph
+2025-10-02T08:00:26.857467430Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/_api/v2/__internal__/autograph/__init__.py", line 8, in <module>
+2025-10-02T08:00:26.857472520Z     from tensorflow.python.autograph.core.ag_ctx import control_status_ctx # line: 34
+2025-10-02T08:00:26.857478640Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/autograph/core/ag_ctx.py", line 21, in <module>
+2025-10-02T08:00:26.857483770Z     from tensorflow.python.autograph.utils import ag_logging
+2025-10-02T08:00:26.857488910Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/autograph/utils/__init__.py", line 17, in <module>
+2025-10-02T08:00:26.857494001Z     from tensorflow.python.autograph.utils.context_managers import control_dependency_on_returns
+2025-10-02T08:00:26.857499081Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/autograph/utils/context_managers.py", line 19, in <module>
+2025-10-02T08:00:26.857504481Z     from tensorflow.python.framework import ops
+2025-10-02T08:00:26.857509541Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/framework/ops.py", line 45, in <module>
+2025-10-02T08:00:26.857514591Z     from tensorflow.python.eager import context
+2025-10-02T08:00:26.857519601Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/eager/context.py", line 37, in <module>
+2025-10-02T08:00:26.857524662Z     from tensorflow.python.eager import execute
+2025-10-02T08:00:26.857529832Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/eager/execute.py", line 21, in <module>
+2025-10-02T08:00:26.857534892Z     from tensorflow.python.framework import dtypes
+2025-10-02T08:00:26.857540002Z   File "/usr/local/lib/python3.10/dist-packages/tensorflow/python/framework/dtypes.py", line 21, in <module>
+2025-10-02T08:00:26.857545122Z     import ml_dtypes
+2025-10-02T08:00:26.857593394Z   File "/usr/local/lib/python3.10/dist-packages/ml_dtypes/__init__.py", line 32, in <module>
+2025-10-02T08:00:26.857598754Z     from ml_dtypes._custom_floats import bfloat16
+2025-10-02T08:00:26.857603784Z AttributeError: _ARRAY_API not found
+2025-10-02T08:00:26.857608814Z ImportError: numpy.core._multiarray_umath failed to import
+2025-10-02T08:00:26.857613865Z 2025-10-02 08:00:26,857 - processors.text_detector - ERROR - Error loading Keras-OCR: numpy.core.umath failed to import
+2025-10-02T08:00:26.857618945Z 2025-10-02 08:00:26,857 - processors.text_detector - WARNING - Text detection will be disabled
+2025-10-02T08:00:26.857808871Z 2025-10-02 08:00:26,857 - processors.text_detector - INFO - TextDetector initialized
+2025-10-02T08:00:26.882733984Z 2025-10-02 08:00:26,882 - processors.nsfw_detector - INFO - Loading NudeNet detector model...
+2025-10-02T08:00:27.124564364Z 2025-10-02 08:00:27,124 - processors.nsfw_detector - INFO - NudeNet detector loaded successfully
+2025-10-02T08:00:27.124605675Z 2025-10-02 08:00:27,124 - processors.nsfw_detector - INFO - NSFWDetector initialized
+2025-10-02T08:00:27.164463238Z 2025-10-02 08:00:27,164 - processors.audio_profanity - INFO - Profanity filter loaded
+2025-10-02T08:00:27.164499770Z 2025-10-02 08:00:27,164 - processors.audio_profanity - INFO - Local Whisper disabled, will use cloud API if available
+2025-10-02T08:00:27.164503210Z 2025-10-02 08:00:27,164 - processors.audio_profanity - INFO - AudioProfanityDetector initialized
+2025-10-02T08:00:27.164559822Z 2025-10-02 08:00:27,164 - processors.object_tracker - INFO - ObjectTracker initialized (type: CSRT)
+2025-10-02T08:00:27.164575672Z 2025-10-02 08:00:27,164 - processors.blur_applicator - INFO - BlurApplicator initialized (kernel: 51, sigma: 25)
+2025-10-02T08:00:27.164578692Z 2025-10-02 08:00:27,164 - main - INFO - All ML models loaded successfully
+2025-10-02T08:00:27.164674276Z INFO:     Application startup complete.
+2025-10-02T08:00:27.166454897Z INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2025-10-02T08:00:30.884132136Z INFO:     127.0.0.1:37966 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:01:01.084983904Z INFO:     127.0.0.1:60820 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:01:31.290408719Z INFO:     127.0.0.1:34784 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:01:49.740321502Z INFO:     100.64.0.35:51800 - "GET / HTTP/1.1" 404 Not Found
+2025-10-02T08:01:51.140075431Z INFO:     100.64.0.25:50676 - "GET / HTTP/1.1" 404 Not Found
+2025-10-02T08:01:52.566120000Z INFO:     100.64.0.28:41940 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+2025-10-02T08:01:57.394348840Z INFO:     100.64.0.28:52560 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:02:01.497378428Z INFO:     127.0.0.1:51156 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:02:31.707730159Z INFO:     127.0.0.1:54636 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:03:01.909188967Z INFO:     127.0.0.1:34670 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:03:32.120666031Z INFO:     127.0.0.1:40290 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:04:02.330019591Z INFO:     127.0.0.1:46794 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:04:32.540260512Z INFO:     127.0.0.1:53740 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:05:02.751331357Z INFO:     127.0.0.1:55950 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:05:32.962907008Z INFO:     127.0.0.1:37336 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:06:01.350812704Z INFO:     100.64.0.20:52352 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:06:03.170495924Z INFO:     127.0.0.1:58098 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:06:12.880607467Z 2025-10-02 08:06:12,880 - main - INFO - [Session 230c02e0-44cc-4d3c-bc92-2b078e0676f1] Created new stream session
+2025-10-02T08:06:12.880649298Z 2025-10-02 08:06:12,880 - main - INFO - Created session: 230c02e0-44cc-4d3c-bc92-2b078e0676f1
+2025-10-02T08:06:12.881166806Z INFO:     100.64.0.20:59474 - "POST /session/create HTTP/1.1" 200 OK
+2025-10-02T08:06:33.369193793Z INFO:     127.0.0.1:51258 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:07:03.577411127Z INFO:     127.0.0.1:51094 - "GET /health HTTP/1.1" 200 OK
+2025-10-02T08:07:05.966061898Z 2025-10-02 08:07:05,965 - main - INFO - [Session f8539c98-d8b0-4a7c-b901-ecfd7083446e] Created new stream session
+2025-10-02T08:07:05.966106739Z 2025-10-02 08:07:05,965 - main - INFO - Created session: f8539c98-d8b0-4a7c-b901-ecfd7083446e
+2025-10-02T08:07:05.966609996Z INFO:     100.64.0.28:46492 - "POST /session/create HTTP/1.1" 200 OK
+2025-10-02T08:07:33.794070085Z INFO:     127.0.0.1:49736 - "GET /health HTTP/1.1" 200 OK

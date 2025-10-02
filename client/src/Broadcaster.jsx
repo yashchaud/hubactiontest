@@ -10,11 +10,12 @@ import {
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import '@livekit/components-styles';
+import { useCensorshipProcessor } from './hooks/useCensorshipProcessor';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
 // Broadcaster stream component with professional controls
-function BroadcasterStream({ censorshipEnabled }) {
+function BroadcasterStream({ censorshipEnabled, roomName }) {
   const tracks = useTracks(
     [Track.Source.Camera, Track.Source.ScreenShare],
     { onlySubscribed: false }
@@ -30,6 +31,13 @@ function BroadcasterStream({ censorshipEnabled }) {
   const localVideoTrack = tracks.find(
     track => track.participant.identity === localParticipant.identity &&
             track.source === Track.Source.Camera
+  );
+
+  // Use censorship processor hook
+  const { detections, isProcessing, stats } = useCensorshipProcessor(
+    localVideoTrack,
+    roomName,
+    censorshipEnabled
   );
 
   const screenShareTrack = tracks.find(
@@ -200,6 +208,61 @@ function BroadcasterStream({ censorshipEnabled }) {
           }}
         />
       </div>
+
+      {/* Censorship Detection Panel */}
+      {censorshipEnabled && isProcessing && (
+        <div style={{
+          background: 'rgba(0, 0, 0, 0.8)',
+          border: '1px solid rgba(102, 126, 234, 0.5)',
+          borderRadius: '12px',
+          padding: '16px',
+          marginTop: '10px'
+        }}>
+          <div style={{ marginBottom: '12px' }}>
+            <h3 style={{ margin: 0, marginBottom: '8px', color: '#667eea', fontSize: '16px' }}>
+              🛡️ Censorship Monitor
+            </h3>
+            <div style={{ display: 'flex', gap: '20px', fontSize: '13px', color: '#a0a0b0' }}>
+              <span>Frames: {stats.framesProcessed}</span>
+              <span>Detections: {stats.detectionsFound}</span>
+              {stats.lastProcessedAt && (
+                <span>Last: {stats.lastProcessedAt.toLocaleTimeString()}</span>
+              )}
+            </div>
+          </div>
+
+          {/* Recent Detections */}
+          {detections.length > 0 && (
+            <div style={{
+              maxHeight: '120px',
+              overflowY: 'auto',
+              background: 'rgba(255, 0, 0, 0.1)',
+              borderRadius: '8px',
+              padding: '8px'
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#ff6b6b', marginBottom: '6px' }}>
+                ⚠️ Recent Detections:
+              </div>
+              {detections.slice(0, 5).map((detection, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: '6px 8px',
+                    background: 'rgba(255, 107, 107, 0.2)',
+                    borderRadius: '6px',
+                    marginBottom: '4px',
+                    fontSize: '12px',
+                    color: '#ffb3b3'
+                  }}
+                >
+                  <strong>{detection.type}:</strong> {detection.description || 'Detected'}
+                  {detection.confidence && ` (${Math.round(detection.confidence * 100)}%)`}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Broadcast Tips */}
       <div style={{
@@ -426,7 +489,7 @@ export default function Broadcaster({ roomName, participantName, onLeave }) {
             setError(`Connection failed: ${error.message}`);
           }}
         >
-          <BroadcasterStream censorshipEnabled={censorshipActive} />
+          <BroadcasterStream censorshipEnabled={censorshipActive} roomName={roomName} />
         </LiveKitRoom>
       </div>
     </div>

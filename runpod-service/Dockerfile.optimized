@@ -137,6 +137,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PATH="/usr/local/bin:$PATH"
+# Set HOME to writable directory (fixes Keras/Matplotlib cache permission errors)
+ENV HOME=/app
+ENV MPLCONFIGDIR=/app/.config/matplotlib
+ENV KERAS_HOME=/app/.keras
 
 # Fix NVIDIA repo hash mismatch for runtime stage too
 # Install ONLY runtime dependencies (no build tools!)
@@ -168,9 +172,9 @@ WORKDIR /app
 # Copy application code (this layer invalidates on code changes)
 COPY --chown=nobody:nogroup . .
 
-# Create directories
-RUN mkdir -p /app/models /app/temp /app/logs && \
-    chmod -R 755 /app
+# Create directories (including cache dirs for Keras and Matplotlib)
+RUN mkdir -p /app/models /app/temp /app/logs /app/.config/matplotlib /app/.keras && \
+    chmod -R 777 /app
 
 # Run as non-root user for security
 USER nobody

@@ -13,10 +13,18 @@ import censorshipRulesService from './services/censorshipRulesService.js';
 import censorshipProcessor from './processors/contentCensorshipProcessor.js';
 import processingBridge from './services/processingBridge.js';
 import processorOrchestrator from './processors/processorOrchestrator.js';
+import multer from 'multer';
+import axios from 'axios';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
 
 const PORT = process.env.PORT || 3001;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
@@ -281,6 +289,129 @@ app.post('/token', async (req, res) => {
   } catch (error) {
     console.error('[API] Error generating token:', error);
     res.status(500).json({ error: 'Failed to generate token' });
+  }
+});
+
+// ============================================================================
+// FRAME PROCESSING ENDPOINTS (Client-side censorship)
+// ============================================================================
+
+/**
+ * Create censorship session (client-side processing)
+ * POST /censorship/create-session
+ */
+app.post('/censorship/create-session', async (req, res) => {
+  try {
+    const { room_name, enable_text_detection, enable_nsfw_detection, enable_audio_profanity } = req.body;
+
+    if (!room_name) {
+      return res.status(400).json({ error: 'room_name is required' });
+    }
+
+    // Forward to RunPod service
+    const runpodUrl = process.env.RUNPOD_SERVICE_URL;
+    if (!runpodUrl) {
+      return res.status(503).json({ error: 'RunPod service not configured' });
+    }
+
+    const response = await axios.post(`${runpodUrl}/session/create`, {
+      enable_text_detection: enable_text_detection !== false,
+      enable_nsfw_detection: enable_nsfw_detection !== false,
+      enable_audio_profanity: enable_audio_profanity !== false
+    });
+
+    console.log(`[API] Created censorship session for ${room_name}: ${response.data.session_id}`);
+
+    res.json({
+      session_id: response.data.session_id,
+      room_name,
+      config: response.data.config
+    });
+  } catch (error) {
+    console.error('[API] Error creating censorship session:', error.message);
+    res.status(500).json({ error: 'Failed to create censorship session' });
+  }
+});
+
+/**
+ * Process video frame (client-side processing)
+ * POST /censorship/process-frame
+ */
+app.post('/censorship/process-frame', upload.single('frame'), async (req, res) => {
+  try {
+    const { session_id, room_name } = req.body;
+    const frameBuffer = req.file?.buffer;
+
+    if (!session_id || !frameBuffer) {
+      return res.status(400).json({ error: 'session_id and frame are required' });
+    }
+
+    // Forward frame to RunPod service
+    const runpodUrl = process.env.RUNPOD_SERVICE_URL;
+    if (!runpodUrl) {
+      return res.status(503).json({ error: 'RunPod service not configured' });
+    }
+
+    const FormData = (await import('form-data')).default;
+    const formData = new FormData();
+    formData.append('frame_data', frameBuffer, {
+      filename: 'frame.jpg',
+      contentType: 'image/jpeg'
+    });
+
+    const response = await axios.post(
+      `${runpodUrl}/process/frame`,
+      formData,
+      {
+        params: { session_id },
+        headers: formData.getHeaders(),
+        maxContentLength: 100 * 1024 * 1024,
+        timeout: 5000
+      }
+    );
+
+    const result = response.data;
+
+    // Log detections
+    if (result.detection_count > 0) {
+      console.log(
+        `[Censorship] ${room_name}: ${result.detection_count} detection(s) - Types: ${result.detections.map(d => d.type).join(', ')}`
+      );
+    }
+
+    res.json({
+      frame_id: result.frame_id,
+      detections: result.detections || [],
+      detection_count: result.detection_count || 0,
+      processing_time_ms: result.processing_time_ms || 0
+    });
+  } catch (error) {
+    console.error('[API] Error processing frame:', error.message);
+    res.status(500).json({ error: 'Failed to process frame' });
+  }
+});
+
+/**
+ * Delete censorship session
+ * DELETE /censorship/delete-session/:sessionId
+ */
+app.delete('/censorship/delete-session/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const runpodUrl = process.env.RUNPOD_SERVICE_URL;
+    if (!runpodUrl) {
+      return res.status(503).json({ error: 'RunPod service not configured' });
+    }
+
+    await axios.delete(`${runpodUrl}/session/${sessionId}`);
+
+    console.log(`[API] Deleted censorship session: ${sessionId}`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[API] Error deleting session:', error.message);
+    res.status(500).json({ error: 'Failed to delete session' });
   }
 });
 
