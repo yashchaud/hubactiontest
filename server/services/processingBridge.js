@@ -32,7 +32,7 @@ class ProcessingBridge extends EventEmitter {
 
   /**
    * Start processing for a stream
-   * Creates RTMP ingress and sets up processing pipeline
+   * Initializes censorship session for WebRTC-based broadcasting
    */
   async startProcessing(roomName, censorshipConfig = {}) {
     if (this.activeStreams.has(roomName)) {
@@ -42,27 +42,26 @@ class ProcessingBridge extends EventEmitter {
     try {
       console.log(`[ProcessingBridge] Starting processing for ${roomName}`);
 
-      // Step 1: Create RTMP ingress
-      const ingress = await this._createRTMPIngress(roomName);
-
-      // Step 2: Initialize censorship session
+      // Initialize censorship session
       const censorshipResult = await censorshipProcessor.initializeCensorship(
         roomName,
         censorshipConfig
       );
 
       if (!censorshipResult.success) {
-        throw new Error(`Failed to initialize censorship: ${censorshipResult.error}`);
+        console.warn(`[ProcessingBridge] Censorship init failed: ${censorshipResult.error}`);
+        // Return degraded mode - stream works but without censorship
+        return {
+          success: true,
+          censorshipSessionId: null,
+          degraded: true,
+          error: censorshipResult.error
+        };
       }
-
-      // Step 3: Start egress to extract frames (track egress for processing)
-      const egress = await this._startTrackEgress(roomName);
 
       // Store stream info
       const streamInfo = {
         roomName,
-        ingress,
-        egress,
         censorshipSessionId: censorshipResult.sessionId,
         startedAt: new Date(),
         frameCount: 0,
@@ -73,18 +72,14 @@ class ProcessingBridge extends EventEmitter {
       this.activeStreams.set(roomName, streamInfo);
 
       console.log(`[ProcessingBridge] Processing started for ${roomName}`);
-      console.log(`  - RTMP URL: ${ingress.url}`);
-      console.log(`  - Stream Key: ${ingress.streamKey}`);
       console.log(`  - Censorship Session: ${censorshipResult.sessionId}`);
 
       this.emit('processing:started', streamInfo);
 
       return {
         success: true,
-        rtmpUrl: ingress.url,
-        streamKey: ingress.streamKey,
-        ingressId: ingress.ingressId,
-        censorshipSessionId: censorshipResult.sessionId
+        censorshipSessionId: censorshipResult.sessionId,
+        config: censorshipResult.config
       };
 
     } catch (error) {
@@ -234,16 +229,6 @@ class ProcessingBridge extends EventEmitter {
     try {
       console.log(`[ProcessingBridge] Stopping processing for ${roomName}`);
 
-      // Stop egress
-      if (streamInfo.egress?.egressId) {
-        await egressClient.stopEgress(streamInfo.egress.egressId);
-      }
-
-      // Delete ingress
-      if (streamInfo.ingress?.ingressId) {
-        await ingressClient.deleteIngress(streamInfo.ingress.ingressId);
-      }
-
       // End censorship session
       await censorshipProcessor.endCensorship(roomName);
 
@@ -295,10 +280,6 @@ class ProcessingBridge extends EventEmitter {
     return {
       roomName,
       active: true,
-      rtmpUrl: streamInfo.ingress.url,
-      streamKey: streamInfo.ingress.streamKey,
-      ingressId: streamInfo.ingress.ingressId,
-      egressId: streamInfo.egress?.egressId,
       censorshipSessionId: streamInfo.censorshipSessionId,
       startedAt: streamInfo.startedAt,
       frameCount: streamInfo.frameCount,
