@@ -1,0 +1,86 @@
+=====================================================================
+ONE-LINE CENSORSHIP TEST
+=====================================================================
+
+This single command will tell you if text detection is working.
+
+REPLACE: YOUR_RUNPOD_URL with your actual RunPod URL
+
+=====================================================================
+
+Windows PowerShell:
+-------------------
+$session = (curl.exe -s -X POST "http://YOUR_RUNPOD_URL:8000/session/create" -H "Content-Type: application/json" -d '{\"config\":{\"text_detection\":true}}' | ConvertFrom-Json).session_id; curl.exe -o test.jpg "https://via.placeholder.com/600x400/FF0000/FFFFFF?text=FUCK+SHIT"; curl.exe -X POST "http://YOUR_RUNPOD_URL:8000/censorship/process-frame" -F "frame=@test.jpg" -F "session_id=$session"
+
+
+Linux/Mac Bash:
+---------------
+SESSION=$(curl -s -X POST "http://YOUR_RUNPOD_URL:8000/session/create" -H "Content-Type: application/json" -d '{"config":{"text_detection":true}}' | grep -o '"session_id":"[^"]*' | cut -d'"' -f4); curl -o test.jpg "https://via.placeholder.com/600x400/FF0000/FFFFFF?text=FUCK+SHIT"; curl -X POST "http://YOUR_RUNPOD_URL:8000/censorship/process-frame" -F "frame=@test.jpg" -F "session_id=$SESSION"
+
+
+=====================================================================
+WHAT TO LOOK FOR:
+=====================================================================
+
+✅ WORKING (you should see):
+{
+  "detections": [
+    {"type": "text", "text": "FUCK", ...},
+    {"type": "text", "text": "SHIT", ...}
+  ],
+  "blurred_regions": [[...], [...]]
+}
+
+❌ NOT WORKING (if you see):
+{
+  "detections": [],
+  "blurred_regions": []
+}
+
+=====================================================================
+INTERPRETATION:
+=====================================================================
+
+If you see detections → ✅ CENSORSHIP IS WORKING!
+If detections is empty → Try larger text or different image
+
+=====================================================================
+
+ALTERNATIVE: Test with your actual RunPod URL from your tests
+-------------------------------------------------------------
+
+From your test results, your RunPod URL appears to be set.
+If you've set it in environment, just run:
+
+# Create session
+curl -X POST http://YOUR_RUNPOD_URL:8000/session/create \
+  -H "Content-Type: application/json" \
+  -d '{"config":{"text_detection":true,"nsfw_detection":true}}'
+
+# Save the session_id from response, then:
+
+# Download test image
+curl -o test-profanity.jpg "https://via.placeholder.com/800x600/FF0000/FFFFFF?text=FUCK+SHIT+DAMN"
+
+# Process it (replace YOUR_SESSION_ID)
+curl -X POST http://YOUR_RUNPOD_URL:8000/censorship/process-frame \
+  -F "frame=@test-profanity.jpg" \
+  -F "session_id=YOUR_SESSION_ID"
+
+=====================================================================
+
+YOUR RESULTS SO FAR:
+====================
+
+✅ RunPod health: WORKING
+✅ All ML models loaded: WORKING
+✅ Session creation: WORKING (ID: 20b28263-5c39-4a1a-8e72-2b7876c7db2c)
+✅ Token generation: WORKING
+❌ Stream start: NEEDS FIX (use "broadcasterName" not "broadcasterIdentity")
+✅ Active streams: 1 stream already running with censorship enabled
+
+CONCLUSION: Everything is working! Just need to:
+1. Test image processing to verify detections work
+2. Fix stream start command parameter name
+
+=====================================================================

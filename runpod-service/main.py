@@ -258,16 +258,23 @@ async def process_frame(
         # Apply blur to detected regions
         blurred_frame = await blur_applicator.apply_blur(frame, detections)
 
-        # Encode blurred frame
+        # Encode blurred frame to base64
         _, buffer = cv2.imencode('.jpg', blurred_frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
         blurred_bytes = buffer.tobytes()
+
+        # Convert to base64 for transmission
+        import base64
+        blurred_frame_b64 = base64.b64encode(blurred_bytes).decode('utf-8')
 
         return {
             "frame_id": session.frame_count,
             "detections": [d for d in detections],
             "detection_count": len(detections),
             "processing_time_ms": 0,  # Will be calculated by caller
-            "has_blur": len(detections) > 0
+            "has_blur": len(detections) > 0,
+            "processed_frame": blurred_frame_b64 if len(detections) > 0 else None,  # Include blurred frame
+            "frame_width": frame.shape[1],
+            "frame_height": frame.shape[0]
         }
 
     except Exception as e:
@@ -313,6 +320,20 @@ async def process_audio(
     except Exception as e:
         logger.error(f"Error processing audio: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# CENSORSHIP ENDPOINTS (Aliases for backward compatibility)
+# ============================================================================
+
+@app.post("/censorship/process-frame")
+async def censorship_process_frame(
+    session_id: str,
+    frame: UploadFile = File(...)
+):
+    """Alias endpoint for frame processing (censorship-specific naming)"""
+    # Delegate to the main process_frame endpoint
+    return await process_frame(session_id=session_id, frame_data=frame)
 
 
 # ============================================================================

@@ -1,20 +1,19 @@
-// IMPORTANT: Load environment variables FIRST before importing other modules
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
 
 // Now import other modules (they will read the correct env vars)
-import express from 'express';
-import { AccessToken } from 'livekit-server-sdk';
-import cors from 'cors';
-import { handleWebhook } from './webhooks.js';
-import streamManager from './streamManager.js';
-import roomManager from './roomManager.js';
-import censorshipRulesService from './services/censorshipRulesService.js';
-import censorshipProcessor from './processors/contentCensorshipProcessor.js';
-import processingBridge from './services/processingBridge.js';
-import processorOrchestrator from './processors/processorOrchestrator.js';
-import multer from 'multer';
-import axios from 'axios';
+import express from "express";
+import { AccessToken } from "livekit-server-sdk";
+import cors from "cors";
+import { handleWebhook } from "./webhooks.js";
+import streamManager from "./streamManager.js";
+import roomManager from "./roomManager.js";
+import censorshipRulesService from "./services/censorshipRulesService.js";
+import censorshipProcessor from "./processors/contentCensorshipProcessor.js";
+import processingBridge from "./services/processingBridge.js";
+import processorOrchestrator from "./processors/processorOrchestrator.js";
+import multer from "multer";
+import axios from "axios";
 
 const app = express();
 app.use(cors());
@@ -23,7 +22,7 @@ app.use(express.json());
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
 });
 
 const PORT = process.env.PORT || 3001;
@@ -38,7 +37,7 @@ const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
  * LiveKit webhook endpoint
  * Receives events from LiveKit Cloud for server-side processing
  */
-app.post('/livekit/webhook', handleWebhook);
+app.post("/livekit/webhook", handleWebhook);
 
 // ============================================================================
 // STREAM MANAGEMENT ENDPOINTS
@@ -48,19 +47,23 @@ app.post('/livekit/webhook', handleWebhook);
  * Start a new stream (with pre-processing)
  * POST /stream/start
  */
-app.post('/stream/start', async (req, res) => {
+app.post("/stream/start", async (req, res) => {
   try {
     const { roomName, broadcasterName, options } = req.body;
 
     if (!roomName || !broadcasterName) {
       return res.status(400).json({
-        error: 'roomName and broadcasterName are required'
+        error: "roomName and broadcasterName are required",
       });
     }
 
     console.log(`[API] Starting stream: ${roomName} by ${broadcasterName}`);
 
-    const result = await streamManager.startStream(roomName, broadcasterName, options || {});
+    const result = await streamManager.startStream(
+      roomName,
+      broadcasterName,
+      options || {}
+    );
 
     if (!result.success) {
       return res.status(500).json({ error: result.error });
@@ -68,8 +71,8 @@ app.post('/stream/start', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('[API] Error starting stream:', error);
-    res.status(500).json({ error: 'Failed to start stream' });
+    console.error("[API] Error starting stream:", error);
+    res.status(500).json({ error: "Failed to start stream" });
   }
 });
 
@@ -77,13 +80,13 @@ app.post('/stream/start', async (req, res) => {
  * End a stream (with post-processing)
  * POST /stream/end
  */
-app.post('/stream/end', async (req, res) => {
+app.post("/stream/end", async (req, res) => {
   try {
     const { roomName } = req.body;
 
     if (!roomName) {
       return res.status(400).json({
-        error: 'roomName is required'
+        error: "roomName is required",
       });
     }
 
@@ -97,8 +100,8 @@ app.post('/stream/end', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('[API] Error ending stream:', error);
-    res.status(500).json({ error: 'Failed to end stream' });
+    console.error("[API] Error ending stream:", error);
+    res.status(500).json({ error: "Failed to end stream" });
   }
 });
 
@@ -106,20 +109,20 @@ app.post('/stream/end', async (req, res) => {
  * Get stream status
  * GET /stream/status/:roomName
  */
-app.get('/stream/status/:roomName', async (req, res) => {
+app.get("/stream/status/:roomName", async (req, res) => {
   try {
     const { roomName } = req.params;
 
     const status = await streamManager.getStreamStatus(roomName);
 
     if (!status) {
-      return res.status(404).json({ error: 'Stream not found' });
+      return res.status(404).json({ error: "Stream not found" });
     }
 
     res.json(status);
   } catch (error) {
-    console.error('[API] Error getting stream status:', error);
-    res.status(500).json({ error: 'Failed to get stream status' });
+    console.error("[API] Error getting stream status:", error);
+    res.status(500).json({ error: "Failed to get stream status" });
   }
 });
 
@@ -127,13 +130,13 @@ app.get('/stream/status/:roomName', async (req, res) => {
  * List all active streams
  * GET /streams/active
  */
-app.get('/streams/active', async (req, res) => {
+app.get("/streams/active", async (req, res) => {
   try {
     const streams = await streamManager.listActiveStreams();
     res.json({ streams, count: streams.length });
   } catch (error) {
-    console.error('[API] Error listing streams:', error);
-    res.status(500).json({ error: 'Failed to list streams' });
+    console.error("[API] Error listing streams:", error);
+    res.status(500).json({ error: "Failed to list streams" });
   }
 });
 
@@ -141,13 +144,13 @@ app.get('/streams/active', async (req, res) => {
  * Start recording for a stream
  * POST /stream/recording/start
  */
-app.post('/stream/recording/start', async (req, res) => {
+app.post("/stream/recording/start", async (req, res) => {
   try {
     const { roomName, options } = req.body;
 
     if (!roomName) {
       return res.status(400).json({
-        error: 'roomName is required'
+        error: "roomName is required",
       });
     }
 
@@ -159,8 +162,8 @@ app.post('/stream/recording/start', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('[API] Error starting recording:', error);
-    res.status(500).json({ error: 'Failed to start recording' });
+    console.error("[API] Error starting recording:", error);
+    res.status(500).json({ error: "Failed to start recording" });
   }
 });
 
@@ -168,13 +171,13 @@ app.post('/stream/recording/start', async (req, res) => {
  * Stop recording
  * POST /stream/recording/stop
  */
-app.post('/stream/recording/stop', async (req, res) => {
+app.post("/stream/recording/stop", async (req, res) => {
   try {
     const { recordingId } = req.body;
 
     if (!recordingId) {
       return res.status(400).json({
-        error: 'recordingId is required'
+        error: "recordingId is required",
       });
     }
 
@@ -186,8 +189,8 @@ app.post('/stream/recording/stop', async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('[API] Error stopping recording:', error);
-    res.status(500).json({ error: 'Failed to stop recording' });
+    console.error("[API] Error stopping recording:", error);
+    res.status(500).json({ error: "Failed to stop recording" });
   }
 });
 
@@ -199,19 +202,19 @@ app.post('/stream/recording/stop', async (req, res) => {
  * Get room analytics
  * GET /room/analytics/:roomName
  */
-app.get('/room/analytics/:roomName', (req, res) => {
+app.get("/room/analytics/:roomName", (req, res) => {
   try {
     const { roomName } = req.params;
     const analytics = roomManager.getRoomAnalytics(roomName);
 
     if (!analytics) {
-      return res.status(404).json({ error: 'Room not found' });
+      return res.status(404).json({ error: "Room not found" });
     }
 
     res.json(analytics);
   } catch (error) {
-    console.error('[API] Error getting analytics:', error);
-    res.status(500).json({ error: 'Failed to get analytics' });
+    console.error("[API] Error getting analytics:", error);
+    res.status(500).json({ error: "Failed to get analytics" });
   }
 });
 
@@ -219,22 +222,22 @@ app.get('/room/analytics/:roomName', (req, res) => {
  * Get all active rooms
  * GET /rooms/active
  */
-app.get('/rooms/active', (req, res) => {
+app.get("/rooms/active", (req, res) => {
   try {
     const rooms = roomManager.getLiveRooms();
     res.json({
-      rooms: rooms.map(room => ({
+      rooms: rooms.map((room) => ({
         name: room.name,
         broadcaster: room.broadcaster?.identity,
         viewerCount: room.viewers.size,
         isLive: room.isLive,
-        createdAt: room.createdAt
+        createdAt: room.createdAt,
       })),
-      count: rooms.length
+      count: rooms.length,
     });
   } catch (error) {
-    console.error('[API] Error listing rooms:', error);
-    res.status(500).json({ error: 'Failed to list rooms' });
+    console.error("[API] Error listing rooms:", error);
+    res.status(500).json({ error: "Failed to list rooms" });
   }
 });
 
@@ -246,26 +249,26 @@ app.get('/rooms/active', (req, res) => {
  * Generate access token for LiveKit
  * POST /token
  */
-app.post('/token', async (req, res) => {
+app.post("/token", async (req, res) => {
   try {
     const { roomName, participantName, role, metadata } = req.body;
 
     if (!roomName || !participantName) {
       return res.status(400).json({
-        error: 'roomName and participantName are required'
+        error: "roomName and participantName are required",
       });
     }
 
     // Create access token with unique identity
     // Identity must be unique per room - append role to prevent conflicts
     const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
-      identity: `${participantName}-${role || 'participant'}`,
+      identity: `${participantName}-${role || "participant"}`,
       name: participantName,
-      metadata: metadata ? JSON.stringify(metadata) : undefined
+      metadata: metadata ? JSON.stringify(metadata) : undefined,
     });
 
     // Set permissions based on role
-    const canPublish = role === 'broadcaster';
+    const canPublish = role === "broadcaster";
 
     at.addGrant({
       roomJoin: true,
@@ -274,21 +277,23 @@ app.post('/token', async (req, res) => {
       canSubscribe: true,
       // Additional permissions
       canPublishData: true,
-      canUpdateOwnMetadata: true
+      canUpdateOwnMetadata: true,
     });
 
     const token = await at.toJwt();
 
-    console.log(`[API] Token generated for ${participantName} (${role}) in ${roomName}`);
+    console.log(
+      `[API] Token generated for ${participantName} (${role}) in ${roomName}`
+    );
 
     res.json({
       token,
       wsUrl: process.env.LIVEKIT_WS_URL,
-      identity: `${participantName}-${role || 'participant'}`
+      identity: `${participantName}-${role || "participant"}`,
     });
   } catch (error) {
-    console.error('[API] Error generating token:', error);
-    res.status(500).json({ error: 'Failed to generate token' });
+    console.error("[API] Error generating token:", error);
+    res.status(500).json({ error: "Failed to generate token" });
   }
 });
 
@@ -300,36 +305,43 @@ app.post('/token', async (req, res) => {
  * Create censorship session (client-side processing)
  * POST /censorship/create-session
  */
-app.post('/censorship/create-session', async (req, res) => {
+app.post("/censorship/create-session", async (req, res) => {
   try {
-    const { room_name, enable_text_detection, enable_nsfw_detection, enable_audio_profanity } = req.body;
+    const {
+      room_name,
+      enable_text_detection,
+      enable_nsfw_detection,
+      enable_audio_profanity,
+    } = req.body;
 
     if (!room_name) {
-      return res.status(400).json({ error: 'room_name is required' });
+      return res.status(400).json({ error: "room_name is required" });
     }
 
     // Forward to RunPod service
     const runpodUrl = process.env.RUNPOD_SERVICE_URL;
     if (!runpodUrl) {
-      return res.status(503).json({ error: 'RunPod service not configured' });
+      return res.status(503).json({ error: "RunPod service not configured" });
     }
 
     const response = await axios.post(`${runpodUrl}/session/create`, {
       enable_text_detection: enable_text_detection !== false,
       enable_nsfw_detection: enable_nsfw_detection !== false,
-      enable_audio_profanity: enable_audio_profanity !== false
+      enable_audio_profanity: enable_audio_profanity !== false,
     });
 
-    console.log(`[API] Created censorship session for ${room_name}: ${response.data.session_id}`);
+    console.log(
+      `[API] Created censorship session for ${room_name}: ${response.data.session_id}`
+    );
 
     res.json({
       session_id: response.data.session_id,
       room_name,
-      config: response.data.config
+      config: response.data.config,
     });
   } catch (error) {
-    console.error('[API] Error creating censorship session:', error.message);
-    res.status(500).json({ error: 'Failed to create censorship session' });
+    console.error("[API] Error creating censorship session:", error.message);
+    res.status(500).json({ error: "Failed to create censorship session" });
   }
 });
 
@@ -337,71 +349,81 @@ app.post('/censorship/create-session', async (req, res) => {
  * Process video frame (client-side processing)
  * POST /censorship/process-frame
  */
-app.post('/censorship/process-frame', upload.single('frame'), async (req, res) => {
-  try {
-    const { session_id, room_name } = req.body;
-    const frameBuffer = req.file?.buffer;
+app.post(
+  "/censorship/process-frame",
+  upload.single("frame"),
+  async (req, res) => {
+    try {
+      const { session_id, room_name } = req.body;
+      const frameBuffer = req.file?.buffer;
 
-    if (!session_id || !frameBuffer) {
-      return res.status(400).json({ error: 'session_id and frame are required' });
-    }
-
-    // Forward frame to RunPod service
-    const runpodUrl = process.env.RUNPOD_SERVICE_URL;
-    if (!runpodUrl) {
-      return res.status(503).json({ error: 'RunPod service not configured' });
-    }
-
-    const FormData = (await import('form-data')).default;
-    const formData = new FormData();
-    formData.append('frame_data', frameBuffer, {
-      filename: 'frame.jpg',
-      contentType: 'image/jpeg'
-    });
-
-    const response = await axios.post(
-      `${runpodUrl}/process/frame`,
-      formData,
-      {
-        params: { session_id },
-        headers: formData.getHeaders(),
-        maxContentLength: 100 * 1024 * 1024,
-        timeout: 5000
+      if (!session_id || !frameBuffer) {
+        return res
+          .status(400)
+          .json({ error: "session_id and frame are required" });
       }
-    );
 
-    const result = response.data;
+      // Forward frame to RunPod service
+      const runpodUrl = process.env.RUNPOD_SERVICE_URL;
+      if (!runpodUrl) {
+        return res.status(503).json({ error: "RunPod service not configured" });
+      }
 
-    // Log detections
-    if (result.detection_count > 0) {
-      console.log(
-        `[Censorship] ${room_name}: ${result.detection_count} detection(s) - Types: ${result.detections.map(d => d.type).join(', ')}`
+      const FormData = (await import("form-data")).default;
+      const formData = new FormData();
+      formData.append("frame_data", frameBuffer, {
+        filename: "frame.jpg",
+        contentType: "image/jpeg",
+      });
+
+      const response = await axios.post(
+        `${runpodUrl}/process/frame`,
+        formData,
+        {
+          params: { session_id },
+          headers: formData.getHeaders(),
+          maxContentLength: 100 * 1024 * 1024,
+          timeout: 5000,
+        }
       );
-    }
 
-    res.json({
-      frame_id: result.frame_id,
-      detections: result.detections || [],
-      detection_count: result.detection_count || 0,
-      processing_time_ms: result.processing_time_ms || 0
-    });
-  } catch (error) {
-    console.error('[API] Error processing frame:', error.message);
-    res.status(500).json({ error: 'Failed to process frame' });
+      const result = response.data;
+
+      // Log detections
+      if (result.detection_count > 0) {
+        console.log(
+          `[Censorship] ${room_name}: ${
+            result.detection_count
+          } detection(s) - Types: ${result.detections
+            .map((d) => d.type)
+            .join(", ")}`
+        );
+      }
+
+      res.json({
+        frame_id: result.frame_id,
+        detections: result.detections || [],
+        detection_count: result.detection_count || 0,
+        processing_time_ms: result.processing_time_ms || 0,
+      });
+    } catch (error) {
+      console.error("[API] Error processing frame:", error.message);
+      res.status(500).json({ error: "Failed to process frame" });
+    }
   }
-});
+);
 
 /**
  * Delete censorship session
  * DELETE /censorship/delete-session/:sessionId
  */
-app.delete('/censorship/delete-session/:sessionId', async (req, res) => {
+app.delete("/censorship/delete-session/:sessionId", async (req, res) => {
   try {
     const { sessionId } = req.params;
 
     const runpodUrl = process.env.RUNPOD_SERVICE_URL;
     if (!runpodUrl) {
-      return res.status(503).json({ error: 'RunPod service not configured' });
+      return res.status(503).json({ error: "RunPod service not configured" });
     }
 
     await axios.delete(`${runpodUrl}/session/${sessionId}`);
@@ -410,8 +432,8 @@ app.delete('/censorship/delete-session/:sessionId', async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('[API] Error deleting session:', error.message);
-    res.status(500).json({ error: 'Failed to delete session' });
+    console.error("[API] Error deleting session:", error.message);
+    res.status(500).json({ error: "Failed to delete session" });
   }
 });
 
@@ -423,11 +445,11 @@ app.delete('/censorship/delete-session/:sessionId', async (req, res) => {
  * Health check endpoint
  * GET /health
  */
-app.get('/health', (req, res) => {
+app.get("/health", (req, res) => {
   res.json({
-    status: 'ok',
+    status: "ok",
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
   });
 });
 
@@ -435,28 +457,28 @@ app.get('/health', (req, res) => {
  * Server info endpoint
  * GET /info
  */
-app.get('/info', (req, res) => {
+app.get("/info", (req, res) => {
   const roomsCount = roomManager.getAllRooms().length;
   const liveRoomsCount = roomManager.getLiveRooms().length;
 
   res.json({
-    server: 'LiveKit Webinar Server',
-    version: '2.0.0',
+    server: "LiveKit Webinar Server",
+    version: "2.0.0",
     features: [
-      'Server-side stream management',
-      'Pre/post processing pipelines',
-      'Webhook event handling',
-      'Room state management',
-      'Recording management',
-      'Analytics tracking'
+      "Server-side stream management",
+      "Pre/post processing pipelines",
+      "Webhook event handling",
+      "Room state management",
+      "Recording management",
+      "Analytics tracking",
     ],
     stats: {
       totalRooms: roomsCount,
       liveRooms: liveRoomsCount,
-      uptime: process.uptime()
+      uptime: process.uptime(),
     },
     livekitConfigured: !!LIVEKIT_API_KEY,
-    websocketUrl: process.env.LIVEKIT_WS_URL || 'NOT SET'
+    websocketUrl: process.env.LIVEKIT_WS_URL || "NOT SET",
   });
 });
 
@@ -468,7 +490,7 @@ app.get('/info', (req, res) => {
  * Get censorship rules
  * GET /censorship/rules
  */
-app.get('/censorship/rules', (req, res) => {
+app.get("/censorship/rules", (req, res) => {
   try {
     const { roomName } = req.query;
 
@@ -478,8 +500,8 @@ app.get('/censorship/rules', (req, res) => {
 
     res.json(rules);
   } catch (error) {
-    console.error('[API] Error getting censorship rules:', error);
-    res.status(500).json({ error: 'Failed to get censorship rules' });
+    console.error("[API] Error getting censorship rules:", error);
+    res.status(500).json({ error: "Failed to get censorship rules" });
   }
 });
 
@@ -487,12 +509,12 @@ app.get('/censorship/rules', (req, res) => {
  * Update censorship rules
  * POST /censorship/rules
  */
-app.post('/censorship/rules', async (req, res) => {
+app.post("/censorship/rules", async (req, res) => {
   try {
     const { roomName, rules } = req.body;
 
     if (!rules) {
-      return res.status(400).json({ error: 'rules are required' });
+      return res.status(400).json({ error: "rules are required" });
     }
 
     const result = roomName
@@ -503,10 +525,10 @@ app.post('/censorship/rules', async (req, res) => {
       return res.status(500).json({ error: result.error });
     }
 
-    res.json({ success: true, message: 'Rules updated successfully' });
+    res.json({ success: true, message: "Rules updated successfully" });
   } catch (error) {
-    console.error('[API] Error updating censorship rules:', error);
-    res.status(500).json({ error: 'Failed to update censorship rules' });
+    console.error("[API] Error updating censorship rules:", error);
+    res.status(500).json({ error: "Failed to update censorship rules" });
   }
 });
 
@@ -514,20 +536,22 @@ app.post('/censorship/rules', async (req, res) => {
  * Get censorship statistics
  * GET /censorship/stats/:roomName
  */
-app.get('/censorship/stats/:roomName', (req, res) => {
+app.get("/censorship/stats/:roomName", (req, res) => {
   try {
     const { roomName } = req.params;
 
     const stats = censorshipProcessor.getCensorshipStats(roomName);
 
     if (!stats) {
-      return res.status(404).json({ error: 'No censorship stats found for room' });
+      return res
+        .status(404)
+        .json({ error: "No censorship stats found for room" });
     }
 
     res.json(stats);
   } catch (error) {
-    console.error('[API] Error getting censorship stats:', error);
-    res.status(500).json({ error: 'Failed to get censorship stats' });
+    console.error("[API] Error getting censorship stats:", error);
+    res.status(500).json({ error: "Failed to get censorship stats" });
   }
 });
 
@@ -535,16 +559,16 @@ app.get('/censorship/stats/:roomName', (req, res) => {
  * Get all active censorship sessions
  * GET /censorship/sessions
  */
-app.get('/censorship/sessions', (req, res) => {
+app.get("/censorship/sessions", (req, res) => {
   try {
     const sessions = censorshipProcessor.getActiveSessions();
     res.json({
       sessions,
-      count: sessions.length
+      count: sessions.length,
     });
   } catch (error) {
-    console.error('[API] Error listing censorship sessions:', error);
-    res.status(500).json({ error: 'Failed to list censorship sessions' });
+    console.error("[API] Error listing censorship sessions:", error);
+    res.status(500).json({ error: "Failed to list censorship sessions" });
   }
 });
 
@@ -552,24 +576,27 @@ app.get('/censorship/sessions', (req, res) => {
  * Add word to profanity list
  * POST /censorship/profanity/add
  */
-app.post('/censorship/profanity/add', async (req, res) => {
+app.post("/censorship/profanity/add", async (req, res) => {
   try {
     const { word, type } = req.body;
 
     if (!word) {
-      return res.status(400).json({ error: 'word is required' });
+      return res.status(400).json({ error: "word is required" });
     }
 
-    const result = await censorshipRulesService.addProfanityWord(word, type || 'text');
+    const result = await censorshipRulesService.addProfanityWord(
+      word,
+      type || "text"
+    );
 
     if (!result.success) {
       return res.status(500).json({ error: result.error });
     }
 
-    res.json({ success: true, message: 'Profanity word added' });
+    res.json({ success: true, message: "Profanity word added" });
   } catch (error) {
-    console.error('[API] Error adding profanity word:', error);
-    res.status(500).json({ error: 'Failed to add profanity word' });
+    console.error("[API] Error adding profanity word:", error);
+    res.status(500).json({ error: "Failed to add profanity word" });
   }
 });
 
@@ -577,24 +604,27 @@ app.post('/censorship/profanity/add', async (req, res) => {
  * Remove word from profanity list
  * POST /censorship/profanity/remove
  */
-app.post('/censorship/profanity/remove', async (req, res) => {
+app.post("/censorship/profanity/remove", async (req, res) => {
   try {
     const { word, type } = req.body;
 
     if (!word) {
-      return res.status(400).json({ error: 'word is required' });
+      return res.status(400).json({ error: "word is required" });
     }
 
-    const result = await censorshipRulesService.removeProfanityWord(word, type || 'text');
+    const result = await censorshipRulesService.removeProfanityWord(
+      word,
+      type || "text"
+    );
 
     if (!result.success) {
       return res.status(500).json({ error: result.error });
     }
 
-    res.json({ success: true, message: 'Profanity word removed' });
+    res.json({ success: true, message: "Profanity word removed" });
   } catch (error) {
-    console.error('[API] Error removing profanity word:', error);
-    res.status(500).json({ error: 'Failed to remove profanity word' });
+    console.error("[API] Error removing profanity word:", error);
+    res.status(500).json({ error: "Failed to remove profanity word" });
   }
 });
 
@@ -602,20 +632,20 @@ app.post('/censorship/profanity/remove', async (req, res) => {
  * Get processing status for a room
  * GET /censorship/processing/:roomName
  */
-app.get('/censorship/processing/:roomName', (req, res) => {
+app.get("/censorship/processing/:roomName", (req, res) => {
   try {
     const { roomName } = req.params;
 
     const status = processingBridge.getStatus(roomName);
 
     if (!status) {
-      return res.status(404).json({ error: 'No active processing for room' });
+      return res.status(404).json({ error: "No active processing for room" });
     }
 
     res.json(status);
   } catch (error) {
-    console.error('[API] Error getting processing status:', error);
-    res.status(500).json({ error: 'Failed to get processing status' });
+    console.error("[API] Error getting processing status:", error);
+    res.status(500).json({ error: "Failed to get processing status" });
   }
 });
 
@@ -623,16 +653,16 @@ app.get('/censorship/processing/:roomName', (req, res) => {
  * Get all active processing streams
  * GET /censorship/processing
  */
-app.get('/censorship/processing', (req, res) => {
+app.get("/censorship/processing", (req, res) => {
   try {
     const streams = processingBridge.getActiveStreams();
     res.json({
       streams,
-      count: streams.length
+      count: streams.length,
     });
   } catch (error) {
-    console.error('[API] Error listing processing streams:', error);
-    res.status(500).json({ error: 'Failed to list processing streams' });
+    console.error("[API] Error listing processing streams:", error);
+    res.status(500).json({ error: "Failed to list processing streams" });
   }
 });
 
@@ -640,13 +670,13 @@ app.get('/censorship/processing', (req, res) => {
  * Check RunPod service health
  * GET /censorship/health
  */
-app.get('/censorship/health', async (req, res) => {
+app.get("/censorship/health", async (req, res) => {
   try {
     const health = await censorshipProcessor.checkHealth();
     res.json(health);
   } catch (error) {
-    console.error('[API] Error checking censorship health:', error);
-    res.status(500).json({ error: 'Failed to check censorship health' });
+    console.error("[API] Error checking censorship health:", error);
+    res.status(500).json({ error: "Failed to check censorship health" });
   }
 });
 
@@ -654,13 +684,13 @@ app.get('/censorship/health', async (req, res) => {
  * Get processor orchestrator stats
  * GET /processors/stats
  */
-app.get('/processors/stats', (req, res) => {
+app.get("/processors/stats", (req, res) => {
   try {
     const stats = processorOrchestrator.getStats();
     res.json(stats);
   } catch (error) {
-    console.error('[API] Error getting processor stats:', error);
-    res.status(500).json({ error: 'Failed to get processor stats' });
+    console.error("[API] Error getting processor stats:", error);
+    res.status(500).json({ error: "Failed to get processor stats" });
   }
 });
 
@@ -669,45 +699,87 @@ app.get('/processors/stats', (req, res) => {
 // ============================================================================
 
 app.listen(PORT, async () => {
-  console.log('\n🚀 LiveKit Webinar Server Started\n');
+  console.log("\n🚀 LiveKit Webinar Server Started\n");
   console.log(`Server running on port ${PORT}`);
   console.log(`\n📡 Stream Endpoints:`);
   console.log(`  - Token generation: POST http://localhost:${PORT}/token`);
-  console.log(`  - Webhook receiver: POST http://localhost:${PORT}/livekit/webhook`);
-  console.log(`  - Start stream:     POST http://localhost:${PORT}/stream/start`);
+  console.log(
+    `  - Webhook receiver: POST http://localhost:${PORT}/livekit/webhook`
+  );
+  console.log(
+    `  - Start stream:     POST http://localhost:${PORT}/stream/start`
+  );
   console.log(`  - End stream:       POST http://localhost:${PORT}/stream/end`);
-  console.log(`  - Stream status:    GET  http://localhost:${PORT}/stream/status/:roomName`);
-  console.log(`  - Active streams:   GET  http://localhost:${PORT}/streams/active`);
+  console.log(
+    `  - Stream status:    GET  http://localhost:${PORT}/stream/status/:roomName`
+  );
+  console.log(
+    `  - Active streams:   GET  http://localhost:${PORT}/streams/active`
+  );
   console.log(`\n🔒 Censorship Endpoints:`);
-  console.log(`  - Get rules:        GET  http://localhost:${PORT}/censorship/rules`);
-  console.log(`  - Update rules:     POST http://localhost:${PORT}/censorship/rules`);
-  console.log(`  - Get stats:        GET  http://localhost:${PORT}/censorship/stats/:roomName`);
-  console.log(`  - Active sessions:  GET  http://localhost:${PORT}/censorship/sessions`);
-  console.log(`  - Add profanity:    POST http://localhost:${PORT}/censorship/profanity/add`);
-  console.log(`  - Remove profanity: POST http://localhost:${PORT}/censorship/profanity/remove`);
-  console.log(`  - Processing:       GET  http://localhost:${PORT}/censorship/processing/:roomName`);
-  console.log(`  - Health check:     GET  http://localhost:${PORT}/censorship/health`);
+  console.log(
+    `  - Get rules:        GET  http://localhost:${PORT}/censorship/rules`
+  );
+  console.log(
+    `  - Update rules:     POST http://localhost:${PORT}/censorship/rules`
+  );
+  console.log(
+    `  - Get stats:        GET  http://localhost:${PORT}/censorship/stats/:roomName`
+  );
+  console.log(
+    `  - Active sessions:  GET  http://localhost:${PORT}/censorship/sessions`
+  );
+  console.log(
+    `  - Add profanity:    POST http://localhost:${PORT}/censorship/profanity/add`
+  );
+  console.log(
+    `  - Remove profanity: POST http://localhost:${PORT}/censorship/profanity/remove`
+  );
+  console.log(
+    `  - Processing:       GET  http://localhost:${PORT}/censorship/processing/:roomName`
+  );
+  console.log(
+    `  - Health check:     GET  http://localhost:${PORT}/censorship/health`
+  );
   console.log(`\n📊 Monitoring Endpoints:`);
-  console.log(`  - Room analytics:   GET  http://localhost:${PORT}/room/analytics/:roomName`);
-  console.log(`  - Processor stats:  GET  http://localhost:${PORT}/processors/stats`);
+  console.log(
+    `  - Room analytics:   GET  http://localhost:${PORT}/room/analytics/:roomName`
+  );
+  console.log(
+    `  - Processor stats:  GET  http://localhost:${PORT}/processors/stats`
+  );
   console.log(`  - Server info:      GET  http://localhost:${PORT}/info`);
   console.log(`  - Health check:     GET  http://localhost:${PORT}/health`);
   console.log(`\n⚙️  Configuration:`);
-  console.log(`  - LiveKit configured: ${LIVEKIT_API_KEY ? 'Yes ✅' : 'No ❌'}`);
-  console.log(`  - WebSocket URL: ${process.env.LIVEKIT_WS_URL || 'NOT SET ❌'}`);
-  console.log(`  - Censorship enabled: ${process.env.ENABLE_CENSORSHIP === 'true' ? 'Yes ✅' : 'No ❌'}`);
-  console.log(`  - RunPod service URL: ${process.env.RUNPOD_SERVICE_URL || 'NOT SET ❌'}`);
+  console.log(
+    `  - LiveKit configured: ${LIVEKIT_API_KEY ? "Yes ✅" : "No ❌"}`
+  );
+  console.log(
+    `  - WebSocket URL: ${process.env.LIVEKIT_WS_URL || "NOT SET ❌"}`
+  );
+  console.log(
+    `  - Censorship enabled: ${
+      process.env.ENABLE_CENSORSHIP === "true" ? "Yes ✅" : "No ❌"
+    }`
+  );
+  console.log(
+    `  - RunPod service URL: ${process.env.RUNPOD_SERVICE_URL || "NOT SET ❌"}`
+  );
   console.log(`\n✨ Features enabled:`);
   console.log(`  - Server-side stream management ✅`);
   console.log(`  - Pre/post processing pipelines ✅`);
   console.log(`  - Processor orchestration ✅`);
-  console.log(`  - Real-time content censorship ${process.env.ENABLE_CENSORSHIP === 'true' ? '✅' : '❌'}`);
+  console.log(
+    `  - Real-time content censorship ${
+      process.env.ENABLE_CENSORSHIP === "true" ? "✅" : "❌"
+    }`
+  );
   console.log(`  - Webhook event handling ✅`);
   console.log(`  - Room state tracking ✅`);
   console.log(`  - Analytics & monitoring ✅`);
 
   // Check censorship service health
-  if (process.env.ENABLE_CENSORSHIP === 'true') {
+  if (process.env.ENABLE_CENSORSHIP === "true") {
     console.log(`\n🔍 Checking RunPod censorship service...`);
     try {
       const health = await censorshipProcessor.checkHealth();
@@ -721,5 +793,5 @@ app.listen(PORT, async () => {
     }
   }
 
-  console.log('\n');
+  console.log("\n");
 });

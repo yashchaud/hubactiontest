@@ -8,6 +8,7 @@ import { EgressClient, IngressClient, AccessToken } from 'livekit-server-sdk';
 import { EventEmitter } from 'events';
 import censorshipProcessor from '../processors/contentCensorshipProcessor.js';
 import frameExtractor from './frameExtractor.js';
+import framePublisher from './framePublisher.js';
 import axios from 'axios';
 
 const LIVEKIT_HOST = process.env.LIVEKIT_WS_URL?.replace('wss://', 'https://') || 'https://localhost';
@@ -77,6 +78,20 @@ class ProcessingBridge extends EventEmitter {
       console.log(`[ProcessingBridge] Processing started for ${roomName}`);
       console.log(`  - Censorship Session: ${censorshipResult.sessionId}`);
 
+      // Start frame publisher for processed stream re-injection
+      try {
+        const publisherInfo = await framePublisher.startPublishing(roomName, roomName);
+        streamInfo.publisherInfo = publisherInfo;
+        streamInfo.processedRoomName = publisherInfo.processedRoomName;
+
+        console.log(`[ProcessingBridge] Frame publisher started for ${roomName}`);
+        console.log(`  - Processed room: ${publisherInfo.processedRoomName}`);
+      } catch (error) {
+        console.error(`[ProcessingBridge] Failed to start frame publisher:`, error);
+        // Continue without publisher - degraded mode
+        streamInfo.publisherInfo = null;
+      }
+
       // Listen for frame extractor events
       frameExtractor.on('detection', (data) => {
         if (data.roomName === roomName) {
@@ -89,6 +104,11 @@ class ProcessingBridge extends EventEmitter {
         if (data.roomName === roomName) {
           streamInfo.frameCount = data.frameCount;
           streamInfo.lastProcessed = new Date();
+
+          // Queue processed frame for publishing
+          if (data.processedFrame && streamInfo.publisherInfo) {
+            framePublisher.queueFrame(roomName, data.processedFrame);
+          }
         }
       });
 
@@ -310,6 +330,16 @@ class ProcessingBridge extends EventEmitter {
           console.log(`[ProcessingBridge] Stopped frame extraction for ${roomName}`);
         } catch (err) {
           console.error(`[ProcessingBridge] Error stopping frame extraction:`, err);
+        }
+      }
+
+      // Stop frame publisher if it was started
+      if (streamInfo.publisherInfo) {
+        try {
+          await framePublisher.stopPublishing(roomName);
+          console.log(`[ProcessingBridge] Stopped frame publisher for ${roomName}`);
+        } catch (err) {
+          console.error(`[ProcessingBridge] Error stopping frame publisher:`, err);
         }
       }
 

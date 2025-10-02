@@ -1,0 +1,256 @@
+=============================================================================
+COPY-PASTE TEST COMMANDS
+=============================================================================
+
+IMPORTANT: Replace "YOUR_RUNPOD_URL" with your actual RunPod URL!
+
+=============================================================================
+TEST 1: Check RunPod Health
+=============================================================================
+
+curl http://YOUR_RUNPOD_URL:8000/health
+
+Expected: {"status":"healthy","uptime":123.45,"gpu_available":true}
+
+=============================================================================
+TEST 2: Create Censorship Session
+=============================================================================
+
+curl -X POST http://YOUR_RUNPOD_URL:8000/session/create -H "Content-Type: application/json" -d "{\"config\": {\"nsfw_detection\": true, \"text_detection\": true, \"audio_profanity\": false, \"blur_strength\": 25}}"
+
+Expected: {"session_id":"abc123...","status":"active"}
+SAVE THE SESSION_ID!
+
+=============================================================================
+TEST 3: Download Test Image
+=============================================================================
+
+mkdir test-data
+cd test-data
+curl -o test-image.jpg https://via.placeholder.com/640x480/FF5733/FFFFFF?text=Test+Image
+cd ..
+
+=============================================================================
+TEST 4: Process Test Frame (Replace SESSION_ID)
+=============================================================================
+
+curl -X POST http://YOUR_RUNPOD_URL:8000/censorship/process-frame -F "frame=@test-data/test-image.jpg" -F "session_id=SESSION_ID_HERE"
+
+Expected: {"frame_id":"frame_001","detections":[],"processing_time_ms":123.45}
+
+=============================================================================
+TEST 5: Generate Broadcaster Token
+=============================================================================
+
+curl -X POST http://localhost:3001/token -H "Content-Type: application/json" -d "{\"roomName\": \"test-room-001\", \"participantName\": \"Broadcaster1\", \"role\": \"broadcaster\"}"
+
+Expected: {"token":"eyJhbG...","wsUrl":"wss://...","identity":"Broadcaster1-broadcaster"}
+
+=============================================================================
+TEST 6: Generate Viewer Token
+=============================================================================
+
+curl -X POST http://localhost:3001/token -H "Content-Type: application/json" -d "{\"roomName\": \"test-room-001\", \"participantName\": \"Viewer1\", \"role\": \"viewer\"}"
+
+Expected: {"token":"eyJhbG...","wsUrl":"wss://...","identity":"Viewer1-viewer"}
+
+=============================================================================
+TEST 7: Start Stream with Censorship
+=============================================================================
+
+curl -X POST http://localhost:3001/stream/start -H "Content-Type: application/json" -d "{\"roomName\": \"test-room-001\", \"broadcasterIdentity\": \"Broadcaster1-broadcaster\", \"censorshipConfig\": {\"nsfw_detection\": true, \"text_detection\": true, \"audio_profanity\": true, \"blur_strength\": 25}}"
+
+Expected: {"success":true,"roomName":"test-room-001","censorshipSessionId":"xyz789..."}
+
+Server logs should show:
+[ProcessingBridge] Starting processing for test-room-001
+[ProcessingBridge] Processing started for test-room-001
+
+=============================================================================
+TEST 8: Check Stream Status
+=============================================================================
+
+curl http://localhost:3001/stream/status/test-room-001
+
+Expected: {"roomName":"test-room-001","isActive":true,"censorshipSessionId":"xyz789..."}
+
+=============================================================================
+TEST 9: List All Active Streams
+=============================================================================
+
+curl http://localhost:3001/streams/active
+
+Expected: [{"roomName":"test-room-001","isActive":true,...}]
+
+=============================================================================
+TEST 10: Get Room Analytics
+=============================================================================
+
+curl http://localhost:3001/room/analytics/test-room-001
+
+Expected: {"roomName":"test-room-001","duration":12000,"viewerCount":0,...}
+
+=============================================================================
+TEST 11: End Stream
+=============================================================================
+
+curl -X POST http://localhost:3001/stream/end -H "Content-Type: application/json" -d "{\"roomName\": \"test-room-001\"}"
+
+Expected: {"success":true,"stats":{"duration":180000,"frameCount":15,...}}
+
+Server logs should show:
+[ProcessingBridge] Stopping processing for test-room-001
+[FrameExtractor] Stopping extraction for test-room-001
+[ProcessingBridge] Processing stopped
+
+=============================================================================
+BROWSER TEST: Complete End-to-End Flow
+=============================================================================
+
+1. Start server:
+   cd server
+   npm start
+
+2. Start client (in another terminal):
+   cd client
+   npm run dev
+
+3. Open http://localhost:3000 in browser
+
+4. BROADCASTER FLOW:
+   - Select "Broadcaster" mode
+   - Enter room name: test-room-001
+   - Enter your name: John
+   - Click "Join Room"
+   - Allow camera/microphone
+   - You should see your video
+
+5. Check server terminal for these logs:
+   [Webhook] Participant joined test-room-001: John-broadcaster
+   [Webhook] Track published in test-room-001
+   [Webhook] Starting server-side processing for broadcaster video track
+   [ProcessingBridge] Starting track processing for test-room-001
+   [FrameExtractor] Starting frame extraction for test-room-001
+   [FrameExtractor] Started egress: egr_xxxxx
+
+6. VIEWER FLOW (in another browser tab/window):
+   - Open http://localhost:3000
+   - Select "Viewer" mode
+   - Enter room name: test-room-001
+   - Enter name: Alice
+   - Click "Join Room"
+   - You should see broadcaster's video
+
+7. Check server logs for:
+   [Webhook] Participant joined test-room-001: Alice-viewer
+
+=============================================================================
+CHECK SERVER LOGS FOR EXPECTED OUTPUT
+=============================================================================
+
+When stream starts:
+✓ [ProcessingBridge] Initialized
+✓ [FrameExtractor] Initialized
+✓ [ProcessingBridge] Starting processing for test-room-001
+✓ [ProcessingBridge] Processing started for test-room-001
+   - Censorship Session: xyz789...
+
+When broadcaster publishes video:
+✓ [Webhook] Track published in test-room-001
+✓ [Webhook] Starting server-side processing for broadcaster video track
+✓ [ProcessingBridge] Starting track processing for test-room-001
+   - Track SID: TR_xxxxx
+✓ [FrameExtractor] Starting frame extraction for test-room-001
+✓ [FrameExtractor] Started egress: egr_xxxxx
+
+Frame extraction (every 200ms):
+✓ [FrameExtractor] test-room-001 - Extracted frame 1
+✓ [FrameExtractor] test-room-001 - Extracted frame 2
+✓ [FrameExtractor] test-room-001 - Extracted frame 3
+...
+
+=============================================================================
+CHECK RUNPOD LOGS FOR EXPECTED OUTPUT
+=============================================================================
+
+When RunPod starts (should NOT have NumPy errors):
+✓ INFO:     Started server process [20]
+✓ INFO:     Waiting for application startup.
+✓ 2025-10-02 10:11:39,666 - main - INFO - Initializing ML models...
+✓ 2025-10-02 10:11:42,268 - processors.text_detector - INFO - Loading Keras-OCR pipeline...
+✓ 2025-10-02 10:11:49,967 - processors.text_detector - INFO - Keras-OCR pipeline loaded successfully
+✓ 2025-10-02 10:11:50,058 - processors.nsfw_detector - INFO - NudeNet detector loaded successfully
+✓ 2025-10-02 10:11:50,065 - main - INFO - All ML models loaded successfully
+✓ INFO:     Application startup complete.
+
+Should NOT see:
+✗ AttributeError: _ARRAY_API not found
+✗ A module that was compiled using NumPy 1.x cannot be run in NumPy 2.x
+
+When session created:
+✓ 2025-10-02 10:14:29,238 - main - INFO - Created session: abc123-def456...
+
+=============================================================================
+TROUBLESHOOTING
+=============================================================================
+
+Issue: "Connection refused" to RunPod
+→ Check RUNPOD_URL is correct
+→ Check RunPod container is running
+→ Check port 8000 is exposed
+
+Issue: "No active processing for room"
+→ Make sure you called /stream/start BEFORE broadcaster joins
+→ Order: 1. /stream/start, 2. Broadcaster joins, 3. Publishes video
+
+Issue: Token generation fails
+→ Check server/.env has LIVEKIT_API_KEY and LIVEKIT_API_SECRET
+→ Check LIVEKIT_WS_URL is correct
+
+Issue: Egress not starting
+→ Check LiveKit credentials are correct
+→ Check server logs for errors
+→ Verify track was actually published
+
+Issue: Frames not being sent to RunPod
+→ This is EXPECTED - FFmpeg integration not implemented yet
+→ You should see "Extracted frame N" in logs
+→ But frames won't actually be sent to RunPod
+→ See ARCHITECTURE.md Phase 1 for implementation
+
+=============================================================================
+WHAT'S WORKING vs NOT WORKING
+=============================================================================
+
+✅ WORKING:
+- RunPod service health check
+- Censorship session creation (no NumPy errors)
+- Frame processing via API
+- LiveKit token generation
+- Stream start/end
+- Webhook events (track_published)
+- Processing bridge lifecycle
+- Track Egress start
+- Server logs show frame extraction
+- Client-side frame capture (1 FPS, legacy)
+
+⚠️ PARTIAL (Architecture in place, needs implementation):
+- Frame extraction (logs show extraction but doesn't send to RunPod)
+- FFmpeg integration (TODO)
+
+❌ NOT WORKING YET:
+- Actual frames sent to RunPod from server
+- Processed stream delivery to viewers
+- Viewers still see raw stream
+
+=============================================================================
+NEXT STEPS
+=============================================================================
+
+After testing:
+1. If all tests pass → NumPy fix is working ✓
+2. If egress starts → Architecture is working ✓
+3. Next: Implement FFmpeg frame extraction (ARCHITECTURE.md Phase 1)
+4. Then: Implement processed stream delivery (ARCHITECTURE.md Phase 2)
+
+=============================================================================

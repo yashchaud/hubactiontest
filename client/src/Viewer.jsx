@@ -113,13 +113,18 @@ export default function Viewer({ roomName, participantName, onLeave }) {
     async function getToken() {
       try {
         setLoading(true);
+
+        // Join the processed room instead of raw room
+        // This ensures viewers see the censored stream
+        const processedRoomName = `processed-${roomName}`;
+
         const response = await fetch(`${SERVER_URL}/token`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            roomName,
+            roomName: processedRoomName, // Join processed room
             participantName,
             role: 'viewer'
           }),
@@ -132,6 +137,8 @@ export default function Viewer({ roomName, participantName, onLeave }) {
         const data = await response.json();
         setToken(data.token);
         setWsUrl(data.wsUrl);
+
+        console.log(`[Viewer] Joining processed room: ${processedRoomName}`);
       } catch (err) {
         console.error('Error fetching token:', err);
         setError('Failed to connect to server. Make sure the backend is running.');

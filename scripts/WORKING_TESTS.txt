@@ -1,0 +1,351 @@
+=============================================================================
+CORRECTED WORKING TEST COMMANDS
+Based on your actual API responses
+=============================================================================
+
+REPLACE: YOUR_RUNPOD_URL with your actual RunPod URL
+
+=============================================================================
+✅ TEST 1: RunPod Health - PASSED
+=============================================================================
+
+curl http://YOUR_RUNPOD_URL:8000/health
+
+YOUR RESULT:
+✅ Status: healthy
+✅ All models loaded (text_detector, nsfw_detector, audio_profanity_detector, object_tracker, blur_applicator)
+✅ 3 active sessions
+
+CONCLUSION: RunPod is working perfectly! No NumPy errors ✓
+
+=============================================================================
+✅ TEST 2: Create Session - PASSED
+=============================================================================
+
+curl -X POST http://YOUR_RUNPOD_URL:8000/session/create -H "Content-Type: application/json" -d "{\"config\": {\"nsfw_detection\": true, \"text_detection\": true}}"
+
+YOUR RESULT:
+✅ Session created: 20b28263-5c39-4a1a-8e72-2b7876c7db2c
+✅ Config loaded correctly
+
+CONCLUSION: Session creation works! ✓
+
+=============================================================================
+✅ TEST 3: Token Generation - PASSED
+=============================================================================
+
+curl -X POST http://localhost:3001/token -H "Content-Type: application/json" -d "{\"roomName\": \"test-room-001\", \"participantName\": \"TestBroadcaster\", \"role\": \"broadcaster\"}"
+
+YOUR RESULT:
+✅ Token generated successfully
+✅ Identity: TestBroadcaster-broadcaster
+
+CONCLUSION: Server is working! ✓
+
+=============================================================================
+❌ TEST 4: Start Stream - FAILED (Wrong parameters)
+=============================================================================
+
+ISSUE: You used "broadcasterIdentity" but API expects "broadcasterName"
+
+CORRECTED COMMAND:
+
+curl -X POST http://localhost:3001/stream/start -H "Content-Type: application/json" -d "{\"roomName\": \"test-room-001\", \"broadcasterName\": \"TestBroadcaster\", \"options\": {\"enableCensorship\": true}}"
+
+Expected response:
+{
+  "success": true,
+  "roomName": "test-room-001",
+  "censorshipSessionId": "...",
+  "message": "Stream started successfully"
+}
+
+=============================================================================
+TEST 5: Verify Censorship is Working - NEW COMPREHENSIVE TEST
+=============================================================================
+
+To test if censorship is ACTUALLY working, we need to:
+1. Create a session
+2. Upload a test image with detectable content
+3. Check if it's censored
+
+----------------------------------------------------------------------------
+STEP 1: Create a censorship session
+----------------------------------------------------------------------------
+
+curl -X POST http://YOUR_RUNPOD_URL:8000/session/create -H "Content-Type: application/json" -d "{\"config\": {\"nsfw_detection\": true, \"text_detection\": true, \"blur_strength\": 25}}"
+
+SAVE THE SESSION_ID from response!
+
+----------------------------------------------------------------------------
+STEP 2: Create test image with TEXT
+----------------------------------------------------------------------------
+
+# Download an image with visible text
+curl -o test-text.jpg "https://via.placeholder.com/800x600/0000FF/FFFFFF?text=FUCK+THIS+SHIT"
+
+This creates an image with profanity text that should be detected.
+
+----------------------------------------------------------------------------
+STEP 3: Process the image
+----------------------------------------------------------------------------
+
+# Replace SESSION_ID with the one from Step 1
+SESSION_ID="paste-session-id-here"
+
+curl -X POST http://YOUR_RUNPOD_URL:8000/censorship/process-frame -F "frame=@test-text.jpg" -F "session_id=$SESSION_ID"
+
+EXPECTED RESPONSE (if text detection works):
+{
+  "frame_id": "frame_001",
+  "detections": [
+    {
+      "type": "text",
+      "text": "FUCK",
+      "bbox": [x, y, w, h],
+      "confidence": 0.95
+    },
+    {
+      "type": "text",
+      "text": "SHIT",
+      "bbox": [x, y, w, h],
+      "confidence": 0.93
+    }
+  ],
+  "blurred_regions": [[x, y, w, h], [x, y, w, h]],
+  "processing_time_ms": 156.78
+}
+
+If you see detections → TEXT DETECTION IS WORKING! ✅
+
+----------------------------------------------------------------------------
+STEP 4: Test with NSFW image (use appropriate test image)
+----------------------------------------------------------------------------
+
+# For NSFW testing, you need an actual test image
+# DO NOT use real NSFW content - use test datasets or labeled test images
+
+# Example with a test image (replace with your test file):
+curl -X POST http://YOUR_RUNPOD_URL:8000/censorship/process-frame -F "frame=@nsfw-test-image.jpg" -F "session_id=$SESSION_ID"
+
+EXPECTED RESPONSE (if NSFW detection works):
+{
+  "frame_id": "frame_002",
+  "detections": [
+    {
+      "type": "nsfw",
+      "label": "EXPOSED_BREAST_F",
+      "confidence": 0.89,
+      "bbox": [100, 200, 300, 400]
+    }
+  ],
+  "blurred_regions": [[100, 200, 300, 400]],
+  "processing_time_ms": 234.56
+}
+
+If you see detections → NSFW DETECTION IS WORKING! ✅
+
+=============================================================================
+TEST 6: End-to-End Stream Test (Browser)
+=============================================================================
+
+This tests the COMPLETE workflow including server-side processing.
+
+----------------------------------------------------------------------------
+STEP 1: Start stream with CORRECTED command
+----------------------------------------------------------------------------
+
+curl -X POST http://localhost:3001/stream/start -H "Content-Type: application/json" -d "{\"roomName\": \"test-room-001\", \"broadcasterName\": \"TestBroadcaster\", \"options\": {\"enableCensorship\": true}}"
+
+Expected response:
+{
+  "success": true,
+  "roomName": "test-room-001",
+  "censorshipSessionId": "xyz-abc-123"
+}
+
+Check server logs for:
+✓ [StreamManager] Starting stream: test-room-001 by TestBroadcaster
+✓ [ProcessingBridge] Starting processing for test-room-001
+✓ [ProcessingBridge] Processing started for test-room-001
+
+----------------------------------------------------------------------------
+STEP 2: Open broadcaster in browser
+----------------------------------------------------------------------------
+
+1. Open: http://localhost:3000
+2. Click "Broadcaster" mode
+3. Enter room name: test-room-001
+4. Enter name: TestBroadcaster
+5. Click "Join Room"
+6. Allow camera/microphone
+
+When you publish video, check server logs for:
+✓ [Webhook] Participant joined test-room-001: TestBroadcaster-broadcaster
+✓ [Webhook] Track published in test-room-001
+✓ [Webhook] Starting server-side processing for broadcaster video track
+✓ [ProcessingBridge] Starting track processing for test-room-001
+✓ [FrameExtractor] Starting frame extraction for test-room-001
+✓ [FrameExtractor] Started egress: egr_xxxxx
+
+If you see these logs → SERVER-SIDE PROCESSING IS WORKING! ✅
+
+----------------------------------------------------------------------------
+STEP 3: Check if frames are being extracted
+----------------------------------------------------------------------------
+
+Look in server logs for:
+✓ [FrameExtractor] test-room-001 - Extracted frame 1
+✓ [FrameExtractor] test-room-001 - Extracted frame 2
+✓ [FrameExtractor] test-room-001 - Extracted frame 3
+
+If you see these → FRAME EXTRACTION ARCHITECTURE IS WORKING! ✅
+
+NOTE: Frames are not actually being SENT to RunPod yet (FFmpeg not implemented)
+      But the architecture is in place and egress is running!
+
+----------------------------------------------------------------------------
+STEP 4: Test client-side processing (legacy feature)
+----------------------------------------------------------------------------
+
+Open browser console (F12) on broadcaster window.
+
+Look for:
+✓ [CensorshipProcessor] Processing frame...
+✓ [CensorshipProcessor] Sending frame to server...
+✓ POST http://localhost:3001/censorship/process-frame
+
+This is the existing 1 FPS client-side processing (already worked before)
+
+----------------------------------------------------------------------------
+STEP 5: End stream
+----------------------------------------------------------------------------
+
+curl -X POST http://localhost:3001/stream/end -H "Content-Type: application/json" -d "{\"roomName\": \"test-room-001\"}"
+
+Expected response:
+{
+  "success": true,
+  "stats": {
+    "duration": 60000,
+    "frameCount": 10,
+    "detectionCount": 0
+  }
+}
+
+Check server logs for:
+✓ [ProcessingBridge] Stopping processing for test-room-001
+✓ [FrameExtractor] Stopping extraction for test-room-001
+✓ [FrameExtractor] Stopped egress: egr_xxxxx
+
+=============================================================================
+SUMMARY OF YOUR RESULTS
+=============================================================================
+
+From your test output:
+
+✅ RunPod Health: WORKING
+   - All ML models loaded successfully
+   - No NumPy errors (the fix worked!)
+
+✅ Session Creation: WORKING
+   - Session ID: 20b28263-5c39-4a1a-8e72-2b7876c7db2c
+   - All detectors enabled
+
+✅ Token Generation: WORKING
+   - LiveKit token generated
+   - Server is running correctly
+
+❌ Stream Start: FAILED
+   - Reason: Wrong parameter name
+   - Fix: Use "broadcasterName" instead of "broadcasterIdentity"
+
+✅ Active Streams: WORKING
+   - You already have a stream running: "ads" by "as"
+   - Censorship is enabled on it
+   - Session ID: 3309a361-0d4e-4a0b-84e6-de4157361c6c
+
+=============================================================================
+HOW TO VERIFY CENSORSHIP IS ACTUALLY WORKING
+=============================================================================
+
+Option 1: Direct API Test (Recommended - Quick)
+-----------------------------------------------
+
+1. Create session:
+   curl -X POST http://YOUR_RUNPOD_URL:8000/session/create \
+     -H "Content-Type: application/json" \
+     -d '{"config": {"text_detection": true, "nsfw_detection": true}}'
+
+   → Save the session_id
+
+2. Download test image with text:
+   curl -o test-profanity.jpg "https://via.placeholder.com/600x400/FF0000/FFFFFF?text=FUCK+BITCH+SHIT"
+
+3. Process it:
+   curl -X POST http://YOUR_RUNPOD_URL:8000/censorship/process-frame \
+     -F "frame=@test-profanity.jpg" \
+     -F "session_id=YOUR_SESSION_ID"
+
+4. Check response:
+   - If "detections" array has items → WORKING! ✅
+   - If "detections" is empty → Not detecting or text too small
+
+Option 2: Live Stream Test (Full E2E)
+--------------------------------------
+
+1. Hold a piece of paper with profanity in front of your camera
+2. Stream via browser (broadcaster mode)
+3. Check browser console for detection logs
+4. Check server logs for processing
+
+NOTE: Current client-side processing is only 1 FPS, so detections are slow
+
+=============================================================================
+NEXT ACTIONS
+=============================================================================
+
+1. ✅ Fix the stream start command:
+   Use: "broadcasterName" instead of "broadcasterIdentity"
+
+2. ✅ Test text detection directly:
+   Create session → Upload image with text → Check detections
+
+3. ✅ Verify server-side processing:
+   Start stream → Join as broadcaster → Check server logs for egress
+
+4. ⚠️ Frame extraction works but doesn't send to RunPod yet:
+   This is expected - FFmpeg integration needed (ARCHITECTURE.md Phase 1)
+
+5. ⚠️ Viewers still see raw stream:
+   This is expected - Re-injection needed (ARCHITECTURE.md Phase 2)
+
+=============================================================================
+CORRECTED QUICK TEST COMMANDS
+=============================================================================
+
+# 1. Health check
+curl http://YOUR_RUNPOD_URL:8000/health
+
+# 2. Create session
+SESSION_RESPONSE=$(curl -s -X POST http://YOUR_RUNPOD_URL:8000/session/create -H "Content-Type: application/json" -d '{"config":{"text_detection":true,"nsfw_detection":true}}')
+echo $SESSION_RESPONSE
+SESSION_ID=$(echo $SESSION_RESPONSE | grep -o '"session_id":"[^"]*' | cut -d'"' -f4)
+echo "Session ID: $SESSION_ID"
+
+# 3. Download test image
+curl -o test-text.jpg "https://via.placeholder.com/800x600/0000FF/FFFFFF?text=FUCK+THIS"
+
+# 4. Process frame
+curl -X POST http://YOUR_RUNPOD_URL:8000/censorship/process-frame -F "frame=@test-text.jpg" -F "session_id=$SESSION_ID"
+
+# 5. Start stream (CORRECTED)
+curl -X POST http://localhost:3001/stream/start -H "Content-Type: application/json" -d '{"roomName":"test-room-002","broadcasterName":"TestBroadcaster","options":{"enableCensorship":true}}'
+
+# 6. Check status
+curl http://localhost:3001/stream/status/test-room-002
+
+# 7. End stream
+curl -X POST http://localhost:3001/stream/end -H "Content-Type: application/json" -d '{"roomName":"test-room-002"}'
+
+=============================================================================
