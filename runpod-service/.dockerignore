@@ -85,3 +85,13 @@ datasets/
 # Coverage
 .coverage
 htmlcov/
+
+# Build artifacts
+build.log
+build-info.txt
+*.tar.gz
+*.zip
+
+# Cache directories
+.cache/
+__pypackages__/

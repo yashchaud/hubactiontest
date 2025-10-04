@@ -43,8 +43,9 @@ RUN mkdir -p /app/models /app/temp
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python3 -c "import requests; requests.get('http://localhost:8000/health')"
+# Note: start-period=300s (5 min) allows ML models to download on first run
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
+    CMD python3 -c "import requests; requests.get('http://localhost:8000/health', timeout=5)" || exit 1
 
 # Run FastAPI application with uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
