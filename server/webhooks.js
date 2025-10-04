@@ -8,6 +8,10 @@ import roomManager from './roomManager.js';
 import { preProcessor } from './processors/preProcessor.js';
 import { postProcessor } from './processors/postProcessor.js';
 import processingBridge from './services/processingBridge.js';
+// Import hybrid agent if enabled
+import censorshipAgentHybrid from './services/censorshipAgentHybrid.js';
+
+const USE_HYBRID_AGENT = process.env.USE_HYBRID_AGENT !== 'false';
 
 const webhookReceiver = new WebhookReceiver(
   process.env.LIVEKIT_API_KEY,
@@ -172,6 +176,47 @@ async function handleParticipantJoined(event) {
 
     // Trigger pre-processing for broadcaster
     await preProcessor.processBroadcasterJoin(roomName, identity, participantInfo);
+
+    // Connect hybrid agent if enabled
+    if (USE_HYBRID_AGENT) {
+      try {
+        console.log(`[Webhook] Connecting Hybrid Agent to ${roomName} for broadcaster ${identity}`);
+
+        // Generate token for agent
+        const { AccessToken } = await import('livekit-server-sdk');
+        const at = new AccessToken(
+          process.env.LIVEKIT_API_KEY,
+          process.env.LIVEKIT_API_SECRET,
+          {
+            identity: `censorship-agent-${roomName}`,
+            name: 'Censorship Agent'
+          }
+        );
+
+        at.addGrant({
+          roomJoin: true,
+          room: roomName,
+          canPublish: true,  // Agent publishes censored video
+          canSubscribe: true,
+          canPublishData: false
+        });
+
+        const agentToken = await at.toJwt();
+
+        // Connect agent
+        const result = await censorshipAgentHybrid.connect(
+          roomName,
+          process.env.LIVEKIT_WS_URL,
+          agentToken,
+          null  // No censorship session ID for hybrid agent
+        );
+
+        console.log(`[Webhook] Hybrid Agent connected to ${roomName}:`, result);
+
+      } catch (error) {
+        console.error(`[Webhook] Error connecting Hybrid Agent to ${roomName}:`, error.message);
+      }
+    }
   } else {
     // Add as viewer
     roomManager.addViewer(roomName, identity, participantInfo);
@@ -197,6 +242,17 @@ async function handleParticipantLeft(event) {
     // Broadcaster left - trigger post-processing
     const analytics = roomManager.getRoomAnalytics(roomName);
     await postProcessor.processBroadcasterLeave(roomName, identity, analytics);
+
+    // Disconnect hybrid agent if enabled
+    if (USE_HYBRID_AGENT) {
+      try {
+        console.log(`[Webhook] Disconnecting Hybrid Agent from ${roomName}`);
+        const result = await censorshipAgentHybrid.disconnect(roomName);
+        console.log(`[Webhook] Hybrid Agent disconnected:`, result.stats);
+      } catch (error) {
+        console.error(`[Webhook] Error disconnecting Hybrid Agent:`, error.message);
+      }
+    }
   }
 }
 
@@ -241,15 +297,26 @@ async function handleTrackPublished(event) {
     console.log(`[Webhook] Starting server-side processing for broadcaster video track in ${roomName}`);
 
     try {
-      const result = await processingBridge.startTrackProcessing(roomName, trackInfo);
+      if (USE_HYBRID_AGENT) {
+        // Use Hybrid 3-Lane Agent (new architecture)
+        console.log(`[Webhook] Using Hybrid 3-Lane Agent for ${roomName}`);
 
-      if (result.success) {
-        console.log(`[Webhook] Track processing started successfully:`, {
-          roomName,
-          egressId: result.egressId
-        });
+        // Agent will connect when it receives track_published event
+        // No action needed here - agent auto-subscribes
+        console.log(`[Webhook] Hybrid agent will auto-subscribe to ${roomName}`);
+
       } else {
-        console.warn(`[Webhook] Failed to start track processing:`, result.error);
+        // Use legacy processing bridge
+        const result = await processingBridge.startTrackProcessing(roomName, trackInfo);
+
+        if (result.success) {
+          console.log(`[Webhook] Track processing started successfully:`, {
+            roomName,
+            egressId: result.egressId
+          });
+        } else {
+          console.warn(`[Webhook] Failed to start track processing:`, result.error);
+        }
       }
     } catch (error) {
       console.error(`[Webhook] Error starting track processing:`, error);
