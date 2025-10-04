@@ -14,6 +14,28 @@ const webhookReceiver = new WebhookReceiver(
   process.env.LIVEKIT_API_SECRET
 );
 
+// Track recent webhooks for diagnostics
+const recentWebhooks = [];
+const MAX_RECENT_WEBHOOKS = 20;
+
+function trackWebhook(event) {
+  recentWebhooks.push({
+    event: event.event,
+    room: event.room?.name,
+    participant: event.participant?.identity,
+    timestamp: new Date().toISOString()
+  });
+
+  // Keep only last N webhooks
+  if (recentWebhooks.length > MAX_RECENT_WEBHOOKS) {
+    recentWebhooks.shift();
+  }
+}
+
+export function getRecentWebhooks() {
+  return recentWebhooks;
+}
+
 /**
  * Handle LiveKit webhook events
  */
@@ -35,6 +57,9 @@ export async function handleWebhook(req, res) {
       room: event.room?.name,
       participant: event.participant?.identity
     });
+
+    // Track webhook for diagnostics
+    trackWebhook(event);
 
     // Route to appropriate handler
     switch (event.event) {

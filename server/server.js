@@ -5,7 +5,7 @@ dotenv.config();
 import express from "express";
 import { AccessToken } from "livekit-server-sdk";
 import cors from "cors";
-import { handleWebhook } from "./webhooks.js";
+import { handleWebhook, getRecentWebhooks } from "./webhooks.js";
 import streamManager from "./streamManager.js";
 import roomManager from "./roomManager.js";
 import censorshipRulesService from "./services/censorshipRulesService.js";
@@ -698,6 +698,58 @@ app.get("/processors/stats", (req, res) => {
 });
 
 // ============================================================================
+// WEBHOOK TESTING & DIAGNOSTICS
+// ============================================================================
+
+/**
+ * Test webhook endpoint - simulates a track_published event
+ * GET /webhook/test
+ */
+app.get("/webhook/test", (req, res) => {
+  res.json({
+    message: "Webhook endpoint is reachable",
+    endpoint: `/livekit/webhook`,
+    publicUrl: req.headers.host,
+    instructions: {
+      step1: "Configure webhook in LiveKit Cloud Dashboard",
+      step2: "Go to: https://cloud.livekit.io/projects/[your-project]/settings",
+      step3: "Add webhook URL:",
+      localTesting: "Use ngrok to expose localhost: ngrok http 3001",
+      webhookUrl: `https://your-ngrok-url/livekit/webhook`,
+      production: `https://${req.headers.host}/livekit/webhook`,
+      requiredEvents: [
+        "room_started",
+        "participant_joined",
+        "track_published",
+        "track_unpublished",
+        "participant_left",
+        "room_finished"
+      ]
+    },
+    status: {
+      webhookEndpoint: "✅ Active and listening",
+      runpodService: process.env.RUNPOD_SERVICE_URL || "❌ Not configured",
+      liveKitConfigured: process.env.LIVEKIT_WS_URL && process.env.LIVEKIT_API_KEY ? "✅ Yes" : "❌ No"
+    }
+  });
+});
+
+/**
+ * Webhook diagnostics - check last received webhooks
+ * GET /webhook/diagnostics
+ */
+app.get("/webhook/diagnostics", (req, res) => {
+  const recentWebhooks = getRecentWebhooks();
+  res.json({
+    webhooksReceived: recentWebhooks.length,
+    recentEvents: recentWebhooks,
+    note: recentWebhooks.length === 0
+      ? "⚠️  No webhooks received yet. Check LiveKit Cloud webhook configuration."
+      : `✅ Receiving webhooks (last ${recentWebhooks.length} events tracked)`
+  });
+});
+
+// ============================================================================
 // START SERVER
 // ============================================================================
 
@@ -753,6 +805,13 @@ app.listen(PORT, async () => {
   );
   console.log(`  - Server info:      GET  http://localhost:${PORT}/info`);
   console.log(`  - Health check:     GET  http://localhost:${PORT}/health`);
+  console.log(`\n🔧 Webhook Diagnostics:`);
+  console.log(
+    `  - Test webhook:     GET  http://localhost:${PORT}/webhook/test`
+  );
+  console.log(
+    `  - Diagnostics:      GET  http://localhost:${PORT}/webhook/diagnostics`
+  );
   console.log(`\n⚙️  Configuration:`);
   console.log(
     `  - LiveKit configured: ${LIVEKIT_API_KEY ? "Yes ✅" : "No ❌"}`
@@ -795,6 +854,25 @@ app.listen(PORT, async () => {
       console.log(`  - RunPod service: ERROR ❌ (${error.message})`);
     }
   }
+
+  // Check webhook configuration
+  console.log(`\n⚠️  IMPORTANT: LiveKit Webhook Configuration`);
+  console.log(`\nFor censorship to work, you MUST configure webhooks in LiveKit Cloud:`);
+  console.log(`  1. Go to: https://cloud.livekit.io/projects/[your-project]/settings`);
+  console.log(`  2. Add webhook URL:`);
+  console.log(`     - For local dev: Use ngrok to expose localhost`);
+  console.log(`       Run: ngrok http ${PORT}`);
+  console.log(`       Then add: https://your-ngrok-url/livekit/webhook`);
+  console.log(`     - For production: https://your-domain.com/livekit/webhook`);
+  console.log(`  3. Enable these events:`);
+  console.log(`     ✓ room_started`);
+  console.log(`     ✓ participant_joined`);
+  console.log(`     ✓ track_published (CRITICAL for frame processing)`);
+  console.log(`     ✓ track_unpublished`);
+  console.log(`     ✓ participant_left`);
+  console.log(`     ✓ room_finished`);
+  console.log(`\n  Test webhook config: http://localhost:${PORT}/webhook/test`);
+  console.log(`  Check diagnostics:   http://localhost:${PORT}/webhook/diagnostics`);
 
   console.log("\n");
 });

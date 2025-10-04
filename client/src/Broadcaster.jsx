@@ -25,7 +25,6 @@ function BroadcasterStream({ censorshipEnabled, roomName }) {
 
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
-  const canvasRef = useRef(null);
 
   // Calculate viewer count (total participants minus broadcaster)
   const viewerCount = Math.max(0, participants.length - 1);
@@ -36,7 +35,7 @@ function BroadcasterStream({ censorshipEnabled, roomName }) {
             track.source === Track.Source.Camera
   );
 
-  // Use censorship processor hook
+  // Use censorship processor hook (for UI display only - frames are processed server-side)
   const { detections, isProcessing, stats } = useCensorshipProcessor(
     localVideoTrack,
     roomName,
@@ -46,62 +45,6 @@ function BroadcasterStream({ censorshipEnabled, roomName }) {
   const screenShareTrack = tracks.find(
     track => track.source === Track.Source.ScreenShare
   );
-
-  // Listen for frame requests from censorship agent
-  useEffect(() => {
-    if (!room || !localVideoTrack || !censorshipEnabled) return;
-
-    const handleDataReceived = async (payload, participant) => {
-      try {
-        // Decode the data
-        const decoder = new TextDecoder();
-        const message = JSON.parse(decoder.decode(payload));
-
-        // Check if this is a frame request from agent
-        if (message.type === 'frame_request' && participant.identity.includes('censorship-agent')) {
-          // Capture current video frame
-          const videoElement = localVideoTrack.videoTrack?.attachedElements[0];
-          if (!videoElement || videoElement.videoWidth === 0) return;
-
-          // Create canvas and capture frame
-          if (!canvasRef.current) {
-            canvasRef.current = document.createElement('canvas');
-          }
-          const canvas = canvasRef.current;
-          canvas.width = videoElement.videoWidth;
-          canvas.height = videoElement.videoHeight;
-
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(videoElement, 0, 0);
-
-          // Convert to base64 JPEG with quality setting (0.7 for balance of quality/size)
-          const frameData = canvas.toDataURL('image/jpeg', 0.7);
-          const base64Frame = frameData.split(',')[1]; // Remove data:image/jpeg;base64, prefix
-
-          // Send frame data back to agent
-          const response = {
-            type: 'frame_data',
-            timestamp: Date.now(),
-            requestId: message.requestId,
-            frame: base64Frame
-          };
-
-          const encoder = new TextEncoder();
-          const data = encoder.encode(JSON.stringify(response));
-
-          await room.localParticipant.publishData(data, { reliable: false });
-        }
-      } catch (error) {
-        // Silently ignore errors (likely non-JSON data or parsing errors)
-      }
-    };
-
-    room.on(RoomEvent.DataReceived, handleDataReceived);
-
-    return () => {
-      room.off(RoomEvent.DataReceived, handleDataReceived);
-    };
-  }, [room, localVideoTrack, censorshipEnabled]);
 
   return (
     <div className="broadcaster-layout">
