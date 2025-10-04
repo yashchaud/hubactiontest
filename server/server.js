@@ -17,7 +17,6 @@ import axios from "axios";
 
 const app = express();
 app.use(cors());
-app.use(express.json());
 
 // Configure multer for file uploads
 const upload = multer({
@@ -36,8 +35,12 @@ const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 /**
  * LiveKit webhook endpoint
  * Receives events from LiveKit Cloud for server-side processing
+ * IMPORTANT: Use express.raw() for webhook to preserve raw body for signature verification
  */
-app.post("/livekit/webhook", handleWebhook);
+app.post("/livekit/webhook", express.raw({ type: 'application/webhook+json' }), handleWebhook);
+
+// Apply JSON parsing to all other routes AFTER webhook endpoint
+app.use(express.json());
 
 // ============================================================================
 // STREAM MANAGEMENT ENDPOINTS

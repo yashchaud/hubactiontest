@@ -4,26 +4,11 @@
  * Handles frame extraction, processing, and reinjection
  */
 
-import { EgressClient, IngressClient, AccessToken } from 'livekit-server-sdk';
 import { EventEmitter } from 'events';
 import censorshipProcessor from '../processors/contentCensorshipProcessor.js';
 import frameExtractor from './frameExtractor.js';
-import framePublisher from './framePublisher.js';
-import axios from 'axios';
 
 const LIVEKIT_HOST = process.env.LIVEKIT_WS_URL?.replace('wss://', 'https://') || 'https://localhost';
-
-const egressClient = new EgressClient(
-  LIVEKIT_HOST,
-  process.env.LIVEKIT_API_KEY,
-  process.env.LIVEKIT_API_SECRET
-);
-
-const ingressClient = new IngressClient(
-  LIVEKIT_HOST,
-  process.env.LIVEKIT_API_KEY,
-  process.env.LIVEKIT_API_SECRET
-);
 
 class ProcessingBridge extends EventEmitter {
   constructor() {
@@ -77,20 +62,7 @@ class ProcessingBridge extends EventEmitter {
 
       console.log(`[ProcessingBridge] Processing started for ${roomName}`);
       console.log(`  - Censorship Session: ${censorshipResult.sessionId}`);
-
-      // Start frame publisher for processed stream re-injection
-      try {
-        const publisherInfo = await framePublisher.startPublishing(roomName, roomName);
-        streamInfo.publisherInfo = publisherInfo;
-        streamInfo.processedRoomName = publisherInfo.processedRoomName;
-
-        console.log(`[ProcessingBridge] Frame publisher started for ${roomName}`);
-        console.log(`  - Processed room: ${publisherInfo.processedRoomName}`);
-      } catch (error) {
-        console.error(`[ProcessingBridge] Failed to start frame publisher:`, error);
-        // Continue without publisher - degraded mode
-        streamInfo.publisherInfo = null;
-      }
+      console.log(`  - Method: Agent-based (no ingress required)`);
 
       // Listen for frame extractor events
       frameExtractor.on('detection', (data) => {
@@ -104,11 +76,7 @@ class ProcessingBridge extends EventEmitter {
         if (data.roomName === roomName) {
           streamInfo.frameCount = data.frameCount;
           streamInfo.lastProcessed = new Date();
-
-          // Queue processed frame for publishing
-          if (data.processedFrame && streamInfo.publisherInfo) {
-            framePublisher.queueFrame(roomName, data.processedFrame);
-          }
+          // Agent handles publishing via data channel
         }
       });
 
@@ -149,28 +117,51 @@ class ProcessingBridge extends EventEmitter {
       console.log(`  - Track type: ${trackInfo.type}`);
       console.log(`  - Track source: ${trackInfo.source}`);
 
-      // Start frame extraction using Track Egress
+      // Start frame extraction using agent-based approach
+      // Need to get wsUrl and generate agent token from streamManager
+      const wsUrl = process.env.LIVEKIT_WS_URL;
+
+      // Generate token for agent participant
+      const { AccessToken } = await import('livekit-server-sdk');
+      const agentToken = new AccessToken(
+        process.env.LIVEKIT_API_KEY,
+        process.env.LIVEKIT_API_SECRET,
+        {
+          identity: `censorship-agent-${roomName}`,
+          name: 'Censorship Agent'
+        }
+      );
+
+      agentToken.addGrant({
+        roomJoin: true,
+        room: roomName,
+        canPublish: true,
+        canSubscribe: true
+      });
+
       const extractionResult = await frameExtractor.startExtraction(
         roomName,
         trackInfo.sid,
-        streamInfo.censorshipSessionId
+        streamInfo.censorshipSessionId,
+        wsUrl,
+        await agentToken.toJwt()
       );
 
       streamInfo.trackProcessingStarted = true;
-      streamInfo.egressId = extractionResult.egressId;
+      streamInfo.agentIdentity = extractionResult.agentIdentity;
 
       console.log(`[ProcessingBridge] Track processing started for ${roomName}`);
-      console.log(`  - Egress ID: ${extractionResult.egressId}`);
+      console.log(`  - Agent Identity: ${extractionResult.agentIdentity}`);
 
       this.emit('track:processing:started', {
         roomName,
         trackSid: trackInfo.sid,
-        egressId: extractionResult.egressId
+        agentIdentity: extractionResult.agentIdentity
       });
 
       return {
         success: true,
-        egressId: extractionResult.egressId
+        agentIdentity: extractionResult.agentIdentity
       };
 
     } catch (error) {
@@ -182,58 +173,6 @@ class ProcessingBridge extends EventEmitter {
     }
   }
 
-  /**
-   * Create RTMP ingress for broadcaster to stream to
-   */
-  async _createRTMPIngress(roomName) {
-    try {
-      // Create RTMP ingress
-      const ingress = await ingressClient.createIngress({
-        inputType: 'RTMP_INPUT',
-        name: `censorship-${roomName}`,
-        roomName: roomName,
-        participantIdentity: `broadcaster-${roomName}`,
-        participantName: 'Broadcaster'
-      });
-
-      console.log(`[ProcessingBridge] Created RTMP ingress: ${ingress.ingressId}`);
-
-      return {
-        ingressId: ingress.ingressId,
-        url: ingress.url,
-        streamKey: ingress.streamKey
-      };
-
-    } catch (error) {
-      console.error('[ProcessingBridge] Error creating RTMP ingress:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Start track egress to extract frames for processing
-   */
-  async _startTrackEgress(roomName) {
-    try {
-      // Start track egress to get raw video frames
-      // This will be used to extract frames and send to RunPod
-      const egress = await egressClient.startTrackEgress(roomName, {
-        // Track egress configuration
-        // For now, we'll use track composite to get frames
-      });
-
-      console.log(`[ProcessingBridge] Started track egress: ${egress.egressId}`);
-
-      return {
-        egressId: egress.egressId,
-        status: egress.status
-      };
-
-    } catch (error) {
-      console.error('[ProcessingBridge] Error starting track egress:', error);
-      throw error;
-    }
-  }
 
   /**
    * Process a frame from the stream
@@ -333,15 +272,7 @@ class ProcessingBridge extends EventEmitter {
         }
       }
 
-      // Stop frame publisher if it was started
-      if (streamInfo.publisherInfo) {
-        try {
-          await framePublisher.stopPublishing(roomName);
-          console.log(`[ProcessingBridge] Stopped frame publisher for ${roomName}`);
-        } catch (err) {
-          console.error(`[ProcessingBridge] Error stopping frame publisher:`, err);
-        }
-      }
+      // Agent-based approach - no separate publisher to stop
 
       // End censorship session
       await censorshipProcessor.endCensorship(roomName);

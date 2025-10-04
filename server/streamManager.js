@@ -232,7 +232,7 @@ class StreamManager {
         livekit: livekitRoom ? {
           sid: livekitRoom.sid,
           numParticipants: livekitRoom.numParticipants,
-          creationTime: livekitRoom.creationTime
+          creationTime: livekitRoom.creationTime ? Number(livekitRoom.creationTime) : null
         } : null,
         streamInfo
       };

@@ -43,6 +43,11 @@ class ContentCensorshipProcessor {
         audio_confidence: config.audioConfidence || 0.8,
         profanity_list: config.profanityList || [],
         frame_sample_rate: config.frameSampleRate || 1
+      }, {
+        timeout: 30000, // 30 second timeout
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       const { session_id } = response.data;
@@ -197,7 +202,10 @@ class ContentCensorshipProcessor {
 
       // Delete session in RunPod service
       await axios.delete(
-        `${this.runpodServiceUrl}/session/${session.sessionId}`
+        `${this.runpodServiceUrl}/session/${session.sessionId}`,
+        {
+          timeout: 10000 // 10 second timeout
+        }
       );
 
       // Get session stats before removing

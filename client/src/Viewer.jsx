@@ -1,24 +1,57 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   LiveKitRoom,
   RoomAudioRenderer,
   VideoTrack,
   useTracks,
-  useParticipants
+  useParticipants,
+  useRoomContext
 } from '@livekit/components-react';
-import { Track } from 'livekit-client';
+import { Track, RoomEvent } from 'livekit-client';
 import '@livekit/components-styles';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
 // Cinema-mode viewer component for watching livestreams
 function ViewerStream() {
+  const room = useRoomContext();
+  const [censoredFrame, setCensoredFrame] = useState(null);
+  const [censorshipActive, setCensorshipActive] = useState(false);
+  const canvasRef = useRef(null);
+
   const tracks = useTracks(
     [Track.Source.Camera, Track.Source.ScreenShare],
     { onlySubscribed: false }
   );
 
   const participants = useParticipants();
+
+  // Listen for censored frames from agent via data channel
+  useEffect(() => {
+    if (!room) return;
+
+    const handleDataReceived = (payload, participant) => {
+      try {
+        const decoder = new TextDecoder();
+        const message = JSON.stringify(decoder.decode(payload));
+        const data = JSON.parse(message);
+
+        if (data.type === 'censored_frame') {
+          setCensoredFrame(data.frame);
+          setCensorshipActive(true);
+          console.log(`[Viewer] Received censored frame #${data.frameNumber}`);
+        }
+      } catch (error) {
+        console.error('[Viewer] Error processing data:', error);
+      }
+    };
+
+    room.on(RoomEvent.DataReceived, handleDataReceived);
+
+    return () => {
+      room.off(RoomEvent.DataReceived, handleDataReceived);
+    };
+  }, [room]);
 
   // Filter out local participant to get viewer count
   const viewerCount = participants.length;
@@ -56,27 +89,73 @@ function ViewerStream() {
             paddingTop: '56.25%', // 16:9 aspect ratio
             background: '#000'
           }}>
-            {tracks.map((trackRef) => (
-              <div
-                key={trackRef.publication.trackSid}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%'
-                }}
-              >
-                <VideoTrack
-                  trackRef={trackRef}
+            {censorshipActive && censoredFrame ? (
+              // Show censored frame when available
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%'
+              }}>
+                <img
+                  src={`data:image/jpeg;base64,${censoredFrame}`}
+                  alt="Censored Stream"
                   style={{
                     width: '100%',
                     height: '100%',
                     objectFit: 'contain'
                   }}
                 />
+                {/* AI censorship indicator */}
+                <div style={{
+                  position: 'absolute',
+                  top: '10px',
+                  right: '10px',
+                  background: 'rgba(239, 68, 68, 0.9)',
+                  color: 'white',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <div style={{
+                    width: '6px',
+                    height: '6px',
+                    borderRadius: '50%',
+                    background: '#fff',
+                    animation: 'pulse 2s infinite'
+                  }}></div>
+                  AI CENSORED
+                </div>
               </div>
-            ))}
+            ) : (
+              // Show original stream when no censorship
+              tracks.map((trackRef) => (
+                <div
+                  key={trackRef.publication.trackSid}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%'
+                  }}
+                >
+                  <VideoTrack
+                    trackRef={trackRef}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain'
+                    }}
+                  />
+                </div>
+              ))
+            )}
           </div>
 
           {/* Broadcaster name overlay */}
@@ -114,17 +193,13 @@ export default function Viewer({ roomName, participantName, onLeave }) {
       try {
         setLoading(true);
 
-        // Join the processed room instead of raw room
-        // This ensures viewers see the censored stream
-        const processedRoomName = `processed-${roomName}`;
-
         const response = await fetch(`${SERVER_URL}/token`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            roomName: processedRoomName, // Join processed room
+            roomName,
             participantName,
             role: 'viewer'
           }),
@@ -138,7 +213,7 @@ export default function Viewer({ roomName, participantName, onLeave }) {
         setToken(data.token);
         setWsUrl(data.wsUrl);
 
-        console.log(`[Viewer] Joining processed room: ${processedRoomName}`);
+        console.log(`[Viewer] Connected to room: ${roomName}`);
       } catch (err) {
         console.error('Error fetching token:', err);
         setError('Failed to connect to server. Make sure the backend is running.');
