@@ -1,0 +1,76 @@
+===============================================
+ QUICK START: Testing on 2GB GPU
+===============================================
+
+RECOMMENDED: Text + NSFW Detection
+GPU Memory: 1.3GB (Fits in 2GB!)
+Features: OCR + Profanity + NSFW + Tracking
+
+STEP 1: Build Image
+-------------------
+cd runpod-service
+docker build -f Dockerfile.cpu-test -t censorship:cpu-test .
+
+STEP 2: Run Text + NSFW (RECOMMENDED!)
+---------------------------------------
+./run-text-nsfw.sh
+
+OR manually:
+
+docker run --rm --gpus all -p 8000:8000 \
+  -e LOAD_TEXT_DETECTOR=true \
+  -e LOAD_NSFW_DETECTOR=true \
+  -e LOAD_AUDIO_DETECTOR=false \
+  -e LOAD_OBJECT_TRACKER=true \
+  censorship:cpu-test
+
+STEP 3: Test Features
+----------------------
+# Wait 2-3 minutes for models to load
+
+# Check health
+curl http://localhost:8000/health
+
+# Run tests
+cd test-scripts
+./test-text-detection.sh
+./test-nsfw-detection.sh
+
+===============================================
+ OTHER CONFIGURATIONS
+===============================================
+
+CPU Mode (All Features - Slower but Works):
+--------------------------------------------
+./run-cpu-all.sh
+
+Text Only (1GB GPU):
+--------------------
+docker run --rm --gpus all -p 8000:8000 \
+  -e LOAD_TEXT_DETECTOR=true \
+  -e LOAD_NSFW_DETECTOR=false \
+  -e LOAD_AUDIO_DETECTOR=false \
+  censorship:cpu-test
+
+NSFW Only (700MB GPU):
+-----------------------
+docker run --rm --gpus all -p 8000:8000 \
+  -e LOAD_TEXT_DETECTOR=false \
+  -e LOAD_NSFW_DETECTOR=true \
+  -e LOAD_AUDIO_DETECTOR=false \
+  censorship:cpu-test
+
+===============================================
+ MEMORY USAGE SUMMARY
+===============================================
+
+Configuration         | GPU Memory | Fits 2GB? | Speed
+---------------------|------------|-----------|----------
+Text + NSFW          | 1.3GB      | YES ✓     | 200-400ms
+Text Only            | 1.0GB      | YES ✓     | 100-200ms
+NSFW Only            | 0.7GB      | YES ✓     | 150-300ms
+Audio Only           | 0.6GB      | YES ✓     | 500ms-1s
+All (GPU)            | 2GB+       | NO ✗      | OOM
+All (CPU)            | 0GB        | YES ✓     | 2-4s
+
+RECOMMENDED: Start with Text + NSFW!

@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # Profile 1: Text + NSFW Detection (Fits in 2GB GPU!)
+  # GPU Memory: ~1.3GB
+  text-nsfw:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu-test
+    ports:
+      - "8000:8000"
+    environment:
+      - LOAD_TEXT_DETECTOR=true
+      - LOAD_NSFW_DETECTOR=true
+      - LOAD_AUDIO_DETECTOR=false
+      - LOAD_OBJECT_TRACKER=true
+      - LOG_LEVEL=INFO
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles: ["text-nsfw", "default"]
+
+  # Profile 2: Text Detection Only
+  # GPU Memory: ~1GB
+  text-only:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu-test
+    ports:
+      - "8001:8000"
+    environment:
+      - LOAD_TEXT_DETECTOR=true
+      - LOAD_NSFW_DETECTOR=false
+      - LOAD_AUDIO_DETECTOR=false
+      - LOAD_OBJECT_TRACKER=true
+      - LOG_LEVEL=INFO
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles: ["text-only"]
+
+  # Profile 3: NSFW Detection Only
+  # GPU Memory: ~700MB
+  nsfw-only:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu-test
+    ports:
+      - "8002:8000"
+    environment:
+      - LOAD_TEXT_DETECTOR=false
+      - LOAD_NSFW_DETECTOR=true
+      - LOAD_AUDIO_DETECTOR=false
+      - LOAD_OBJECT_TRACKER=true
+      - LOG_LEVEL=INFO
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles: ["nsfw-only"]
+
+  # Profile 4: CPU Mode (All Features)
+  # No GPU required
+  cpu-all:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu-test
+    ports:
+      - "8003:8000"
+    environment:
+      - LOAD_TEXT_DETECTOR=true
+      - LOAD_NSFW_DETECTOR=true
+      - LOAD_AUDIO_DETECTOR=true
+      - LOAD_OBJECT_TRACKER=true
+      - LOG_LEVEL=INFO
+    # No GPU deployment for CPU mode
+    profiles: ["cpu"]
+
+  # Profile 5: Audio Only (for testing audio feature)
+  # GPU Memory: ~600MB
+  audio-only:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu-test
+    ports:
+      - "8004:8000"
+    environment:
+      - LOAD_TEXT_DETECTOR=false
+      - LOAD_NSFW_DETECTOR=false
+      - LOAD_AUDIO_DETECTOR=true
+      - LOAD_OBJECT_TRACKER=false
+      - LOG_LEVEL=INFO
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles: ["audio-only"]

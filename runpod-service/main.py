@@ -85,17 +85,50 @@ async def lifespan(app: FastAPI):
     """Initialize and cleanup ML models"""
     global text_detector, nsfw_detector, audio_profanity_detector, object_tracker, blur_applicator
 
-    logger.info("Initializing ML models...")
+    # Feature toggles from environment variables
+    enable_text = os.getenv('LOAD_TEXT_DETECTOR', 'true').lower() == 'true'
+    enable_nsfw = os.getenv('LOAD_NSFW_DETECTOR', 'true').lower() == 'true'
+    enable_audio = os.getenv('LOAD_AUDIO_DETECTOR', 'true').lower() == 'true'
+    enable_tracking = os.getenv('LOAD_OBJECT_TRACKER', 'true').lower() == 'true'
+
+    logger.info("Initializing ML models with feature toggles...")
+    logger.info(f"  Text Detection: {enable_text}")
+    logger.info(f"  NSFW Detection: {enable_nsfw}")
+    logger.info(f"  Audio Profanity: {enable_audio}")
+    logger.info(f"  Object Tracking: {enable_tracking}")
 
     try:
-        # Initialize processors
-        text_detector = TextDetector()
-        nsfw_detector = NSFWDetector()
-        audio_profanity_detector = AudioProfanityDetector()
-        object_tracker = ObjectTracker()
+        # Initialize processors conditionally
+        if enable_text:
+            logger.info("Loading Text Detector...")
+            text_detector = TextDetector()
+        else:
+            logger.info("Text Detector disabled (skipped)")
+
+        if enable_nsfw:
+            logger.info("Loading NSFW Detector...")
+            nsfw_detector = NSFWDetector()
+        else:
+            logger.info("NSFW Detector disabled (skipped)")
+
+        if enable_audio:
+            logger.info("Loading Audio Profanity Detector...")
+            audio_profanity_detector = AudioProfanityDetector()
+        else:
+            logger.info("Audio Profanity Detector disabled (skipped)")
+
+        if enable_tracking:
+            logger.info("Loading Object Tracker...")
+            object_tracker = ObjectTracker()
+        else:
+            logger.info("Object Tracker disabled (skipped)")
+
+        # Always load blur applicator (lightweight, no ML model)
+        logger.info("Loading Blur Applicator...")
         blur_applicator = BlurApplicator()
 
-        logger.info("All ML models loaded successfully")
+        loaded_count = sum([enable_text, enable_nsfw, enable_audio, enable_tracking])
+        logger.info(f"ML models loaded successfully ({loaded_count}/4 features enabled)")
 
         yield
 

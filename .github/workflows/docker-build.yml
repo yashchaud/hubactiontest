@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Build and Push Docker Images
 
 on:
   push:
@@ -12,14 +12,26 @@ on:
     branches:
       - main
   workflow_dispatch:  # Allow manual trigger
+    inputs:
+      build_type:
+        description: 'Build type (all, test, production)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - test
+          - production
 
 env:
   REGISTRY: docker.io
   IMAGE_NAME: censorship-service  # Change to YOUR_USERNAME/censorship-service
 
 jobs:
-  build-and-push:
+  build-test-image:
+    name: Build Test Image (CPU/2GB GPU)
     runs-on: ubuntu-latest
+    if: github.event.inputs.build_type == 'all' || github.event.inputs.build_type == 'test' || github.event_name != 'workflow_dispatch'
 
     steps:
       - name: Checkout code
@@ -51,49 +63,102 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
+      - name: Build and push Test image
+        uses: docker/build-push-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          context: ./runpod-service
+          file: ./runpod-service/Dockerfile.cpu-test
+          push: true
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:test
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:test-${{ github.sha }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Build and push Docker image
+  build-production-image:
+    name: Build Production Image (Optimized)
+    runs-on: ubuntu-latest
+    if: github.event.inputs.build_type == 'all' || github.event.inputs.build_type == 'production' || github.event_name != 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo docker system prune -af
+          sudo apt-get clean
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Production image
         uses: docker/build-push-action@v5
         with:
           context: ./runpod-service
           file: ./runpod-service/Dockerfile.optimized
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:production
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:prod-${{ github.sha }}
           platforms: linux/amd64
-          # Disable caching to save disk space (trade-off: slower builds)
-          no-cache: false
-          # Use inline cache only (smaller than registry cache)
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Image digest
-        run: echo ${{ steps.build.outputs.digest }}
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: [build-test-image, build-production-image]
+    if: always()
 
+    steps:
       - name: Build summary
         run: |
-          echo "### Docker Build Complete! 🚀" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Docker Images Built Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "## Available Images" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo "### 🧪 Test Image (Local Testing - 2GB GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:test" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Use for:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Local testing on 2GB GPU" >> $GITHUB_STEP_SUMMARY
+          echo "- Feature toggling (Text+NSFW, CPU mode, etc.)" >> $GITHUB_STEP_SUMMARY
+          echo "- Quick testing without building" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🏭 Production Image (RunPod - 24GB GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:production" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Deploy to RunPod:**" >> $GITHUB_STEP_SUMMARY
-          echo "1. Go to RunPod.io → Templates" >> $GITHUB_STEP_SUMMARY
-          echo "2. Use image: \`${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "3. Set exposed port: 8000" >> $GITHUB_STEP_SUMMARY
+          echo "**Use for:**" >> $GITHUB_STEP_SUMMARY
+          echo "- RunPod deployment" >> $GITHUB_STEP_SUMMARY
+          echo "- Production workloads" >> $GITHUB_STEP_SUMMARY
+          echo "- All features enabled" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Quick Start" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# Pull test image" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Run with Text + NSFW (2GB GPU)" >> $GITHUB_STEP_SUMMARY
+          echo "docker run --rm --gpus all -p 8000:8000 \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -e LOAD_TEXT_DETECTOR=true \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -e LOAD_NSFW_DETECTOR=true \\" >> $GITHUB_STEP_SUMMARY
+          echo "  -e LOAD_AUDIO_DETECTOR=false \\" >> $GITHUB_STEP_SUMMARY
+          echo "  ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:test" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
