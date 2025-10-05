@@ -1,8 +1,8 @@
 # RunPod GPU Service for Real-Time Content Censorship
 # Optimized for NVIDIA GPUs with TensorFlow, OpenCV, and FFmpeg
 
-# Use a valid CUDA base image
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+# Use CUDA devel image (includes ptxas/nvcc for TensorFlow GPU compilation)
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 
 # Prevent interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
