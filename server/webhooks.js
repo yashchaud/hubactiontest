@@ -182,7 +182,31 @@ async function handleParticipantJoined(event) {
       try {
         console.log(`[Webhook] Connecting Hybrid Agent to ${roomName} for broadcaster ${identity}`);
 
-        // Generate token for agent
+        // Step 1: Create RunPod session for this stream
+        const axios = (await import('axios')).default;
+        const runpodUrl = process.env.RUNPOD_SERVICE_URL;
+
+        let censorshipSessionId = null;
+
+        if (runpodUrl) {
+          try {
+            const sessionResponse = await axios.post(`${runpodUrl}/session/create`, {
+              enable_text_detection: false,  // Disable text detection for speed
+              enable_nsfw_detection: true,   // Only NSFW detection
+              enable_audio_profanity: false,
+              enable_object_tracking: false, // Disable tracking for speed
+              blur_strength: 15,
+              frame_sample_rate: 1  // Process every frame sent (we control rate via batch collector)
+            });
+
+            censorshipSessionId = sessionResponse.data.session_id;
+            console.log(`[Webhook] Created RunPod session: ${censorshipSessionId}`);
+          } catch (sessionError) {
+            console.error(`[Webhook] Failed to create RunPod session:`, sessionError.message);
+          }
+        }
+
+        // Step 2: Generate token for agent
         const { AccessToken } = await import('livekit-server-sdk');
         const at = new AccessToken(
           process.env.LIVEKIT_API_KEY,
@@ -203,12 +227,12 @@ async function handleParticipantJoined(event) {
 
         const agentToken = await at.toJwt();
 
-        // Connect agent
+        // Step 3: Connect agent with session ID
         const result = await censorshipAgentHybrid.connect(
           roomName,
           process.env.LIVEKIT_WS_URL,
           agentToken,
-          null  // No censorship session ID for hybrid agent
+          censorshipSessionId  // Pass the RunPod session ID
         );
 
         console.log(`[Webhook] Hybrid Agent connected to ${roomName}:`, result);

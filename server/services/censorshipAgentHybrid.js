@@ -32,6 +32,7 @@ import ConfidenceDecay from '../tracking/ConfidenceDecay.js';
 const KALMAN_ENABLED = process.env.KALMAN_ENABLED !== 'false';
 const BATCH_MAX_WAIT_MS = parseInt(process.env.BATCH_MAX_WAIT_MS) || 30;
 const BATCH_SIZE = parseInt(process.env.BATCH_SIZE) || 8;
+const MAX_PENDING_BATCHES = parseInt(process.env.MAX_PENDING_BATCHES) || 3;
 const CONFIDENCE_DECAY_RATE = parseFloat(process.env.CONFIDENCE_DECAY_RATE) || 0.85;
 const MIN_CONFIDENCE = parseFloat(process.env.MIN_CONFIDENCE) || 0.3;
 const BLUR_DILATION_PX = parseInt(process.env.BLUR_DILATION_PX) || 8;
@@ -86,10 +87,12 @@ class CensorshipAgentHybrid extends EventEmitter {
         batchCollector: new ContinuousBatchCollector({
           maxWaitMs: BATCH_MAX_WAIT_MS,
           maxBatchSize: BATCH_SIZE,
-          maxPending: 15
+          maxPending: MAX_PENDING_BATCHES  // Configurable via env
         }),
         asyncVerifier: new AsyncVerifier({
-          tritonUrl: process.env.TRITON_GRPC_URL
+          runpodUrl: process.env.RUNPOD_SERVICE_URL,
+          sessionId: censorshipSessionId,
+          timeout: 30000  // 30 second timeout (RunPod takes 5-7s per frame)
         }),
 
         // Lane 3: Tracking & Prediction
