@@ -1,127 +1,49 @@
 /**
- * Censorship Agent - Server-Side Participant
- * Joins LiveKit room as participant, subscribes to broadcaster video,
- * processes frames through RunPod, applies censorship, and republishes
+ * Censorship Agent Service
+ * Server-side LiveKit participant that subscribes to broadcaster video,
+ * processes frames for content detection, and publishes censored output
+ *
+ * Uses @livekit/rtc-node for native Node.js WebRTC support
  */
 
-import { Room, RoomEvent, Track, VideoPresets, LocalVideoTrack, setLogLevel, LogLevel } from 'livekit-client';
-import { EventEmitter } from 'events';
-import { createCanvas, loadImage } from 'canvas';
-import axios from 'axios';
+import {
+  Room,
+  RoomEvent,
+  VideoStream,
+  TrackKind,
+  VideoBufferType,
+  VideoSource,
+  LocalVideoTrack,
+  VideoFrame,
+  TrackPublishOptions,
+  TrackSource
+} from '@livekit/rtc-node';
 import FormData from 'form-data';
+import axios from 'axios';
 import { Readable } from 'stream';
-import wrtc from '@roamhq/wrtc';
-import { JSDOM } from 'jsdom';
-
-// Reduce LiveKit logging to avoid wrtc errors
-setLogLevel(LogLevel.warn);
-
-// Configure LiveKit to use Node.js WebRTC and DOM
-if (typeof window === 'undefined') {
-  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
-
-  global.window = dom.window;
-  global.document = dom.window.document;
-
-  // Extend HTMLVideoElement to add play() method that returns a Promise
-  const OriginalHTMLVideoElement = dom.window.HTMLVideoElement;
-  class ExtendedHTMLVideoElement extends OriginalHTMLVideoElement {
-    constructor() {
-      super();
-      this.srcObject = null;
-      this.videoWidth = 0;
-      this.videoHeight = 0;
-    }
-    play() {
-      // Return a resolved promise for Node.js environment
-      return Promise.resolve();
-    }
-    pause() {
-      return Promise.resolve();
-    }
-  }
-
-  global.HTMLVideoElement = ExtendedHTMLVideoElement;
-  global.HTMLCanvasElement = dom.window.HTMLCanvasElement;
-
-  // Override RTCPeerConnection with wrtc implementation
-  global.window.RTCPeerConnection = wrtc.RTCPeerConnection;
-  global.window.RTCIceCandidate = wrtc.RTCIceCandidate;
-  global.window.RTCSessionDescription = wrtc.RTCSessionDescription;
-
-  global.RTCPeerConnection = wrtc.RTCPeerConnection;
-  global.RTCIceCandidate = wrtc.RTCIceCandidate;
-  global.RTCSessionDescription = wrtc.RTCSessionDescription;
-
-  // Patch RTCRtpReceiver to provide getStats stub (not implemented in wrtc)
-  const OriginalRTCPeerConnection = wrtc.RTCPeerConnection;
-  class PatchedRTCPeerConnection extends OriginalRTCPeerConnection {
-    getReceivers() {
-      const receivers = super.getReceivers();
-      // Patch each receiver to provide getStats stub
-      return receivers.map(receiver => {
-        if (!receiver.getStats) {
-          receiver.getStats = async () => {
-            // Return empty stats to prevent crashes
-            return new Map();
-          };
-        }
-        return receiver;
-      });
-    }
-  }
-
-  global.window.RTCPeerConnection = PatchedRTCPeerConnection;
-  global.RTCPeerConnection = PatchedRTCPeerConnection;
-
-  // Add MediaStream polyfill
-  global.MediaStream = wrtc.MediaStream || class MediaStream {
-    constructor() {
-      this.id = Math.random().toString(36);
-      this.active = true;
-      this.tracks = [];
-    }
-    getTracks() { return this.tracks; }
-    getVideoTracks() { return this.tracks.filter(t => t.kind === 'video'); }
-    getAudioTracks() { return this.tracks.filter(t => t.kind === 'audio'); }
-    addTrack(track) { this.tracks.push(track); }
-    removeTrack(track) {
-      const index = this.tracks.indexOf(track);
-      if (index > -1) this.tracks.splice(index, 1);
-    }
-  };
-
-  // Define navigator
-  if (!global.navigator) {
-    Object.defineProperty(global, 'navigator', {
-      value: {
-        userAgent: 'node',
-        mediaDevices: {}
-      },
-      writable: true,
-      configurable: true
-    });
-  }
-}
+import { EventEmitter } from 'events';
+import { createCanvas } from 'canvas';
 
 const RUNPOD_SERVICE_URL = process.env.RUNPOD_SERVICE_URL || 'http://localhost:8000';
 const PROCESSING_FPS = parseInt(process.env.AGENT_FRAME_RATE) || 10;
 const CENSORSHIP_MODE = process.env.AGENT_CENSORSHIP_MODE || 'blur';
-const FRAME_QUALITY = 0.7; // JPEG quality (0.5-0.9 recommended for balance)
-const MAX_CONCURRENT_REQUESTS = 2; // Limit concurrent RunPod requests to prevent overload
 
+/**
+ * Censorship Agent - Server-side participant for content moderation
+ */
 class CensorshipAgent extends EventEmitter {
   constructor() {
     super();
-    this.activeRooms = new Map(); // roomName -> room info
-    console.log('[CensorshipAgent] Initialized');
+    this.activeRooms = new Map(); // roomName -> roomInfo
+    console.log('[CensorshipAgent] Initialized with @livekit/rtc-node');
     console.log(`[CensorshipAgent] Processing FPS: ${PROCESSING_FPS}`);
     console.log(`[CensorshipAgent] Censorship mode: ${CENSORSHIP_MODE}`);
+    console.log(`[CensorshipAgent] RunPod URL: ${RUNPOD_SERVICE_URL}`);
   }
 
   /**
-   * Connect agent to a LiveKit room
-   * @param {string} roomName - Room to join
+   * Connect agent to room as server-side participant
+   * @param {string} roomName - Room to connect to
    * @param {string} wsUrl - LiveKit WebSocket URL
    * @param {string} token - Access token for agent participant
    * @param {string} censorshipSessionId - RunPod session ID
@@ -142,42 +64,56 @@ class CensorshipAgent extends EventEmitter {
         room,
         censorshipSessionId,
         broadcasterTrack: null,
-        censoredTrackPublication: null,
-        processingInterval: null,
+        videoStream: null,
+        videoSource: null,  // VideoSource for publishing censored frames
+        censoredTrack: null,  // Published censored video track
         frameCount: 0,
         detectionCount: 0,
-        lastFrame: null,
-        isProcessing: false,
         startedAt: new Date(),
-        pendingRequests: 0, // Track concurrent RunPod requests
-        lastProcessedTime: 0, // Track last frame processing time for rate limiting
-        skippedFrames: 0 // Track frames skipped due to rate limiting
+        processingTask: null,
+        isProcessing: false,
+        frameWidth: 0,  // Will be set when we get first frame
+        frameHeight: 0,
+        lastDetections: null,  // Store detections for predictive censoring
+        lastDetectionTime: 0
       };
 
       this.activeRooms.set(roomName, roomInfo);
 
-      // Handle track subscriptions
-      room.on(RoomEvent.TrackSubscribed, async (track, publication, participant) => {
-        await this._handleTrackSubscribed(roomName, track, publication, participant);
+      // Handle track published - manually subscribe to broadcaster video only
+      room.on(RoomEvent.TrackPublished, async (publication, participant) => {
+        console.log(`[CensorshipAgent] ${roomName} - Track published by ${participant.identity}: kind=${publication.kind}`);
+
+        // Note: In @livekit/rtc-node, kind values are: 1 = AUDIO, 2 = VIDEO
+        if (participant.identity.includes('broadcaster') && publication.kind === 2) {
+          console.log(`[CensorshipAgent] ${roomName} - Subscribing to broadcaster video track`);
+          publication.setSubscribed(true);
+        } else if (publication.kind === 1) {
+          console.log(`[CensorshipAgent] ${roomName} - Skipping audio track (not needed)`);
+          publication.setSubscribed(false);
+        }
       });
 
-      // Handle data received (for frame data from broadcaster)
-      room.on(RoomEvent.DataReceived, async (payload, participant, kind, topic) => {
-        await this._handleDataReceived(roomName, payload, participant);
+      // Handle track subscribed - start processing video frames
+      room.on(RoomEvent.TrackSubscribed, async (track, publication, participant) => {
+        await this._handleTrackSubscribed(roomName, track, publication, participant);
       });
 
       // Handle disconnection
       room.on(RoomEvent.Disconnected, () => {
         console.log(`[CensorshipAgent] Disconnected from ${roomName}`);
-        this.activeRooms.delete(roomName);
+        this._cleanup(roomName);
       });
 
-      // Connect to room
-      await room.connect(wsUrl, token);
+      // Connect to room with manual subscription control
+      await room.connect(wsUrl, token, {
+        autoSubscribe: false  // Manually control what we subscribe to
+      });
+
       console.log(`[CensorshipAgent] Connected to ${roomName} as ${room.localParticipant.identity}`);
 
-      // Start monitoring for broadcaster track
-      this._startTrackMonitoring(roomName);
+      // Check for existing broadcaster tracks
+      await this._checkExistingTracks(roomName);
 
       return {
         success: true,
@@ -193,266 +129,368 @@ class CensorshipAgent extends EventEmitter {
   }
 
   /**
-   * Monitor room for broadcaster track and start processing
+   * Check for existing broadcaster tracks in the room
+   * Note: In @livekit/rtc-node, tracks are usually subscribed via TrackPublished event
+   * This method is kept for compatibility but may not find existing tracks immediately after connect
    */
-  _startTrackMonitoring(roomName) {
+  async _checkExistingTracks(roomName) {
     const roomInfo = this.activeRooms.get(roomName);
     if (!roomInfo) return;
 
-    // Check for existing broadcaster tracks
-    const participants = Array.from(roomInfo.room.remoteParticipants.values());
-    for (const participant of participants) {
-      const videoTracks = Array.from(participant.videoTrackPublications.values());
-      for (const publication of videoTracks) {
-        if (publication.track) {
-          this._handleTrackSubscribed(
-            roomName,
-            publication.track,
-            publication,
-            participant
-          );
+    try {
+      // Skip if remoteParticipants not available yet
+      if (!roomInfo.room.remoteParticipants) {
+        console.log(`[CensorshipAgent] ${roomName} - Waiting for TrackPublished events to subscribe`);
+        return;
+      }
+
+      const participants = Array.from(roomInfo.room.remoteParticipants.values());
+
+      if (participants.length === 0) {
+        console.log(`[CensorshipAgent] ${roomName} - No participants yet, will subscribe via TrackPublished event`);
+        return;
+      }
+
+      console.log(`[CensorshipAgent] ${roomName} - Checking ${participants.length} existing participant(s)`);
+
+      for (const participant of participants) {
+        if (!participant.identity.includes('broadcaster')) {
+          continue;
+        }
+
+        console.log(`[CensorshipAgent] ${roomName} - Found broadcaster: ${participant.identity}`);
+
+        // Discover the API structure
+        console.log(`[CensorshipAgent] ${roomName} - Participant properties:`, Object.keys(participant));
+
+        // Try different possible APIs for track publications
+        if (participant.trackPublications) {
+          console.log(`[CensorshipAgent] ${roomName} - trackPublications type:`, typeof participant.trackPublications);
+          console.log(`[CensorshipAgent] ${roomName} - trackPublications keys:`, Object.keys(participant.trackPublications));
+
+          // Try iterating as Map
+          if (participant.trackPublications instanceof Map) {
+            console.log(`[CensorshipAgent] ${roomName} - trackPublications is a Map with ${participant.trackPublications.size} entries`);
+            for (const [sid, publication] of participant.trackPublications) {
+              console.log(`[CensorshipAgent] ${roomName} - Track publication:`, {
+                sid,
+                kind: publication.kind,
+                source: publication.source,
+                subscribed: publication.subscribed
+              });
+
+              // Note: In @livekit/rtc-node, kind values are:
+              // 1 = AUDIO, 2 = VIDEO (different from browser SDK!)
+              // Subscribe to video tracks only (kind === 2)
+              if (publication.kind === 2 && !publication.subscribed) {
+                console.log(`[CensorshipAgent] ${roomName} - Subscribing to existing video track: ${sid}`);
+                publication.setSubscribed(true);
+              } else if (publication.kind === 1) {
+                console.log(`[CensorshipAgent] ${roomName} - Skipping audio track: ${sid}`);
+                publication.setSubscribed(false);
+              }
+            }
+          }
+          // Try iterating as Object
+          else {
+            const pubs = Object.values(participant.trackPublications);
+            console.log(`[CensorshipAgent] ${roomName} - trackPublications is an Object with ${pubs.length} entries`);
+            for (const publication of pubs) {
+              console.log(`[CensorshipAgent] ${roomName} - Track publication:`, {
+                sid: publication.sid,
+                kind: publication.kind,
+                source: publication.source,
+                subscribed: publication.subscribed
+              });
+
+              // Subscribe to video tracks only
+              if (publication.kind === 'video' && !publication.subscribed) {
+                console.log(`[CensorshipAgent] ${roomName} - Subscribing to existing video track: ${publication.sid}`);
+                publication.setSubscribed(true);
+              } else if (publication.kind === 'audio') {
+                console.log(`[CensorshipAgent] ${roomName} - Skipping audio track: ${publication.sid}`);
+                publication.setSubscribed(false);
+              }
+            }
+          }
+        } else {
+          console.log(`[CensorshipAgent] ${roomName} - No trackPublications property found`);
         }
       }
+    } catch (error) {
+      // Fail gracefully - tracks will be subscribed via TrackPublished event
+      console.log(`[CensorshipAgent] ${roomName} - Will subscribe to tracks via TrackPublished event`);
     }
   }
 
   /**
-   * Handle new track subscription
+   * Handle track subscription
    */
   async _handleTrackSubscribed(roomName, track, publication, participant) {
     const roomInfo = this.activeRooms.get(roomName);
     if (!roomInfo) return;
 
+    console.log(`[CensorshipAgent] ${roomName} - Track subscribed: kind=${track.kind}, TrackKind.KIND_VIDEO=${TrackKind.KIND_VIDEO}`);
+
     // Only process video tracks from broadcaster
-    if (track.kind !== Track.Kind.Video) {
-      console.log(`[CensorshipAgent] ${roomName} - Ignoring non-video track`);
+    // In @livekit/rtc-node: KIND_VIDEO = 2, KIND_AUDIO = 1
+    if (track.kind !== TrackKind.KIND_VIDEO) {
+      console.log(`[CensorshipAgent] ${roomName} - Ignoring non-video track (kind=${track.kind}) from ${participant.identity}`);
       return;
     }
 
     if (!participant.identity.includes('broadcaster')) {
-      console.log(`[CensorshipAgent] ${roomName} - Ignoring non-broadcaster track`);
+      console.log(`[CensorshipAgent] ${roomName} - Ignoring video track from non-broadcaster: ${participant.identity}`);
       return;
     }
 
     console.log(`[CensorshipAgent] ${roomName} - Subscribed to broadcaster video track`);
     console.log(`  - Participant: ${participant.identity}`);
-    console.log(`  - Track: ${track.sid}`);
+    console.log(`  - Track: ${publication.trackSid}`);
 
     roomInfo.broadcasterTrack = track;
 
-    // Start frame processing
-    await this._startFrameProcessing(roomName);
+    // Initialize VideoSource immediately (assume 1280x720, will adjust if needed)
+    // This ensures we can publish censored frames right away
+    try {
+      await this._initializeVideoSource(roomName, 1280, 720);
+      console.log(`[CensorshipAgent] ${roomName} - VideoSource pre-initialized`);
+    } catch (error) {
+      console.error(`[CensorshipAgent] ${roomName} - Error pre-initializing VideoSource:`, error.message);
+    }
+
+    // Start processing video stream
+    await this._startVideoProcessing(roomName, track);
   }
 
   /**
-   * Start processing frames from broadcaster track
+   * Start processing video frames from track
    */
-  async _startFrameProcessing(roomName) {
+  async _startVideoProcessing(roomName, track) {
     const roomInfo = this.activeRooms.get(roomName);
-    if (!roomInfo || !roomInfo.broadcasterTrack) {
-      console.warn(`[CensorshipAgent] Cannot start processing for ${roomName} - no track`);
-      return;
-    }
+    if (!roomInfo) return;
 
     if (roomInfo.isProcessing) {
-      console.log(`[CensorshipAgent] Already processing ${roomName}`);
+      console.log(`[CensorshipAgent] ${roomName} - Already processing video`);
       return;
     }
 
     roomInfo.isProcessing = true;
     console.log(`[CensorshipAgent] Starting frame processing for ${roomName} at ${PROCESSING_FPS} FPS`);
 
-    // Get native MediaStreamTrack from LiveKit track
-    const mediaStreamTrack = roomInfo.broadcasterTrack.mediaStreamTrack;
+    // Create video stream
+    const videoStream = new VideoStream(track);
+    roomInfo.videoStream = videoStream;
 
-    if (!mediaStreamTrack) {
-      console.error(`[CensorshipAgent] No mediaStreamTrack available for ${roomName}`);
-      roomInfo.isProcessing = false;
-      return;
-    }
+    // Start async frame processing task
+    roomInfo.processingTask = this._processVideoStream(roomName, videoStream);
 
-    // Create MediaStream from track for processing
-    const mediaStream = new MediaStream([mediaStreamTrack]);
-    roomInfo.mediaStream = mediaStream;
-
-    // Set up frame capture using canvas and ImageCapture API (Node.js compatible approach)
-    // Since we're in Node.js, we'll use a different approach with RTCPeerConnection to get frames
-    await this._setupFrameCapture(roomName, mediaStreamTrack);
-
+    // Emit event
     this.emit('processing:started', { roomName, fps: PROCESSING_FPS });
   }
 
   /**
-   * Set up frame capture from MediaStreamTrack using RTCPeerConnection
-   * This method sets up a receiver to get raw video frames from the track
+   * Process video stream frames
+   * Publishes all frames at 30 FPS, but only sends every Nth frame for detection
    */
-  async _setupFrameCapture(roomName, mediaStreamTrack) {
+  async _processVideoStream(roomName, videoStream) {
     const roomInfo = this.activeRooms.get(roomName);
     if (!roomInfo) return;
 
-    try {
-      // For Node.js server-side processing, we need to use a different approach
-      // We'll create a dummy canvas and poll the track settings to get dimensions
-      const settings = mediaStreamTrack.getSettings ? mediaStreamTrack.getSettings() : {};
-      const width = settings.width || 640;
-      const height = settings.height || 480;
+    // Detection happens at PROCESSING_FPS (e.g., 5 FPS)
+    // Publishing happens for ALL frames (30 FPS)
+    const PUBLISH_FPS = 30;
+    const DETECTION_SAMPLE_RATE = Math.floor(PUBLISH_FPS / PROCESSING_FPS); // e.g., 30/5 = 6 (detect every 6th frame)
 
-      console.log(`[CensorshipAgent] ${roomName} - Track dimensions: ${width}x${height}`);
-
-      roomInfo.trackSettings = { width, height };
-      roomInfo.canvas = createCanvas(width, height);
-
-      // Start processing loop
-      // Since we can't directly access video frames in Node.js without a video element,
-      // we'll use an alternative approach: request frames via data channel from client
-      // OR use a workaround with MediaStreamTrackProcessor if available
-
-      // Fallback: Use interval-based processing with frame requests
-      const intervalMs = 1000 / PROCESSING_FPS;
-      roomInfo.processingInterval = setInterval(async () => {
-        await this._captureAndProcessFrame(roomName);
-      }, intervalMs);
-
-      console.log(`[CensorshipAgent] ${roomName} - Frame capture initialized`);
-
-    } catch (error) {
-      console.error(`[CensorshipAgent] ${roomName} - Error setting up frame capture:`, error);
-      roomInfo.isProcessing = false;
-    }
-  }
-
-  /**
-   * Capture and process a single frame
-   * In Node.js environment, we need to work around the lack of video element
-   */
-  async _captureAndProcessFrame(roomName) {
-    const roomInfo = this.activeRooms.get(roomName);
-    if (!roomInfo || !roomInfo.broadcasterTrack) return;
+    let framesSinceLastDetection = 0;
+    let pendingProcessing = 0;
+    const MAX_PENDING = 1; // Max concurrent RunPod requests (only 1 to prevent overwhelming NudeNet)
 
     try {
-      const mediaStreamTrack = roomInfo.broadcasterTrack.mediaStreamTrack;
+      console.log(`[CensorshipAgent] ${roomName} - Starting frame loop`);
+      console.log(`[CensorshipAgent] ${roomName} - Publishing: 30 FPS, Detection: ${PROCESSING_FPS} FPS (every ${DETECTION_SAMPLE_RATE} frames)`);
 
-      // Check if track is still active
-      if (mediaStreamTrack.readyState !== 'live') {
-        console.warn(`[CensorshipAgent] ${roomName} - Track not live (${mediaStreamTrack.readyState})`);
-        return;
-      }
-
-      // For Node.js, we need to use a creative workaround
-      // Option 1: Use node-canvas with a mock video frame
-      // Option 2: Request frames via RTCRtpReceiver (requires access to peer connection)
-      // Option 3: Signal client to send frames via data channel (most reliable for server-side)
-
-      // For now, we'll implement Option 3: Request frame from broadcaster via data channel
-      // The broadcaster will capture their own frame and send it to us
-
-      // Send frame request via data channel
-      await this._requestFrameFromBroadcaster(roomName);
-
-    } catch (error) {
-      // Don't log every error to avoid spam
-      if (roomInfo.frameCount % 100 === 0) {
-        console.error(`[CensorshipAgent] ${roomName} - Error capturing frame:`, error.message);
-      }
-    }
-  }
-
-  /**
-   * Request frame data from broadcaster via data channel
-   * This is the most reliable way to get frames server-side
-   */
-  async _requestFrameFromBroadcaster(roomName) {
-    const roomInfo = this.activeRooms.get(roomName);
-    if (!roomInfo || !roomInfo.room) return;
-
-    try {
-      // Send frame request via data channel
-      const request = {
-        type: 'frame_request',
-        timestamp: Date.now(),
-        requestId: roomInfo.frameCount
-      };
-
-      const encoder = new TextEncoder();
-      const data = encoder.encode(JSON.stringify(request));
-
-      await roomInfo.room.localParticipant.publishData(data, {
-        reliable: false, // Use unreliable for real-time
-        destinationIdentities: [roomInfo.broadcasterTrack.sid]  // Send only to broadcaster
-      });
-
-    } catch (error) {
-      // Silently fail - broadcaster might not support frame requests
-    }
-  }
-
-  /**
-   * Process a received frame buffer (called when broadcaster sends frame data)
-   */
-  async _processReceivedFrame(roomName, frameBuffer) {
-    const roomInfo = this.activeRooms.get(roomName);
-    if (!roomInfo) return;
-
-    try {
-      const now = Date.now();
-      const minFrameInterval = 1000 / PROCESSING_FPS; // Minimum time between frames
-
-      // Rate limiting: Skip frame if processing too fast
-      if (now - roomInfo.lastProcessedTime < minFrameInterval) {
-        roomInfo.skippedFrames++;
-        if (roomInfo.skippedFrames % 100 === 0) {
-          console.log(`[CensorshipAgent] ${roomName} - Rate limiting: ${roomInfo.skippedFrames} frames skipped`);
+      for await (const event of videoStream) {
+        // Check if room still active
+        if (!this.activeRooms.has(roomName)) {
+          console.log(`[CensorshipAgent] ${roomName} - Room no longer active, stopping processing`);
+          break;
         }
-        return;
+
+        const frame = event.frame;
+        roomInfo.frameCount++;
+        framesSinceLastDetection++;
+
+        // Publish ALL frames (maintains 30 FPS)
+        await this._publishFrameWithCensoring(roomName, frame);
+
+        // Only send to RunPod for detection every Nth frame
+        const shouldDetect = framesSinceLastDetection >= DETECTION_SAMPLE_RATE;
+        const hasCapacity = pendingProcessing < MAX_PENDING;
+
+        if (shouldDetect && hasCapacity) {
+          framesSinceLastDetection = 0;
+
+          // Log periodically
+          if (roomInfo.frameCount <= 10 || roomInfo.frameCount % 150 === 0) {
+            console.log(`[CensorshipAgent] ${roomName} - Detecting frame #${roomInfo.frameCount} (${frame.width}x${frame.height})`);
+          }
+
+          // Send to RunPod for detection (fire-and-forget)
+          pendingProcessing++;
+          this._detectFrameAsync(roomName, frame, roomInfo.frameCount)
+            .finally(() => {
+              pendingProcessing--;
+            });
+        } else if (shouldDetect && !hasCapacity) {
+          // Reset counter but skip detection due to backpressure
+          framesSinceLastDetection = 0;
+          if (roomInfo.frameCount % 30 === 0) {
+            console.log(`[CensorshipAgent] ${roomName} - Skipping detection (RunPod busy)`);
+          }
+        }
       }
 
-      // Concurrency limiting: Skip frame if too many pending requests
-      if (roomInfo.pendingRequests >= MAX_CONCURRENT_REQUESTS) {
-        roomInfo.skippedFrames++;
-        return;
+      console.log(`[CensorshipAgent] ${roomName} - Frame loop ended (processed ${roomInfo.frameCount} frames)`);
+
+    } catch (error) {
+      console.error(`[CensorshipAgent] ${roomName} - Video stream error:`, error);
+    } finally {
+      // Wait for pending processing to complete
+      while (pendingProcessing > 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      roomInfo.frameCount++;
-      roomInfo.lastFrame = { buffer: frameBuffer, timestamp: now };
-      roomInfo.lastProcessedTime = now;
-      roomInfo.pendingRequests++;
+      videoStream.close();
+      roomInfo.isProcessing = false;
+      console.log(`[CensorshipAgent] ${roomName} - Processing stopped`);
+    }
+  }
 
-      // Send to RunPod for detection (non-blocking)
-      const detections = await this._sendToRunPod(roomInfo.censorshipSessionId, frameBuffer);
+  /**
+   * Publish frame with censoring applied (based on previous detections)
+   */
+  async _publishFrameWithCensoring(roomName, frame) {
+    const roomInfo = this.activeRooms.get(roomName);
+    if (!roomInfo || !roomInfo.videoSource) return;
 
-      roomInfo.pendingRequests--;
+    try {
+      // Use previous detection results for predictive censoring
+      if (roomInfo.lastDetections && roomInfo.lastDetections.length > 0) {
+        // Apply blur based on last detection
+        await this._publishCensoredFrame(roomName, frame, roomInfo.lastDetections);
+      } else {
+        // No recent detections - publish original
+        await this._publishOriginalFrame(roomName, frame);
+      }
+    } catch (error) {
+      // Silently fail to avoid spam
+    }
+  }
+
+  /**
+   * Send frame to RunPod for detection (async)
+   */
+  async _detectFrameAsync(roomName, frame, frameNumber) {
+    const roomInfo = this.activeRooms.get(roomName);
+    if (!roomInfo) return;
+
+    try {
+      // Convert frame to JPEG and send to RunPod
+      const buffer = await this._convertFrameToJPEG(frame);
+      const detections = await this._sendToRunPod(roomInfo.censorshipSessionId, buffer);
 
       if (detections && detections.length > 0) {
         roomInfo.detectionCount += detections.length;
-        console.log(`[CensorshipAgent] ${roomName} - Frame ${roomInfo.frameCount}: ${detections.length} detection(s) (pending: ${roomInfo.pendingRequests})`);
 
-        // Load image and apply censorship
-        const image = await loadImage(frameBuffer);
-        const canvas = createCanvas(image.width, image.height);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(image, 0, 0);
-
-        // Apply censorship
-        await this._applyCensorship(canvas, ctx, detections);
+        // Log first few and periodically
+        if (frameNumber <= 10 || frameNumber % 150 === 0) {
+          console.log(`[CensorshipAgent] ${roomName} - Frame ${frameNumber}: ${detections.length} detection(s) - CENSORING NEXT FRAMES`);
+        }
 
         // Emit detection event
         this.emit('detection', {
           roomName,
-          frameCount: roomInfo.frameCount,
-          detections,
-          timestamp: now
+          frameNumber,
+          detections
         });
 
-        // Publish censored frame
-        await this._publishCensoredFrame(roomName, canvas);
+        // Store for future frames
+        roomInfo.lastDetections = detections;
+        roomInfo.lastDetectionTime = Date.now();
+      } else {
+        // Clear detections if none found
+        roomInfo.lastDetections = null;
       }
 
     } catch (error) {
-      // Decrement pending requests on error
-      if (roomInfo) {
-        roomInfo.pendingRequests = Math.max(0, roomInfo.pendingRequests - 1);
+      // Only log errors occasionally to avoid spam
+      if (frameNumber <= 10 || frameNumber % 150 === 0) {
+        console.error(`[CensorshipAgent] ${roomName} - Error detecting frame ${frameNumber}:`, error.message);
       }
-      console.error(`[CensorshipAgent] ${roomName} - Error processing frame:`, error.message);
+    }
+  }
+
+  /**
+   * Convert VideoFrame to JPEG buffer
+   * Resizes to max 640px width to reduce processing time
+   */
+  async _convertFrameToJPEG(frame) {
+    let rgbaFrame = null;
+    let tempCanvas = null;
+    let canvas = null;
+
+    try {
+      // Convert to RGBA buffer type
+      rgbaFrame = frame.convert(VideoBufferType.RGBA);
+
+      // Calculate scaled dimensions (max 480px width for lower memory usage)
+      const MAX_WIDTH = 480;
+      let targetWidth = frame.width;
+      let targetHeight = frame.height;
+
+      if (frame.width > MAX_WIDTH) {
+        const scale = MAX_WIDTH / frame.width;
+        targetWidth = MAX_WIDTH;
+        targetHeight = Math.round(frame.height * scale);
+      }
+
+      // Create temporary canvas at original size
+      tempCanvas = createCanvas(frame.width, frame.height);
+      const tempCtx = tempCanvas.getContext('2d');
+
+      // Create ImageData from RGBA buffer
+      const imageData = tempCtx.createImageData(frame.width, frame.height);
+      const rgbaData = new Uint8ClampedArray(rgbaFrame.data);
+      imageData.data.set(rgbaData);
+      tempCtx.putImageData(imageData, 0, 0);
+
+      // Create output canvas at target size
+      canvas = createCanvas(targetWidth, targetHeight);
+      const ctx = canvas.getContext('2d');
+
+      // Draw scaled image
+      ctx.drawImage(tempCanvas, 0, 0, targetWidth, targetHeight);
+
+      // Convert canvas to JPEG buffer (lower quality to save memory)
+      const jpegBuffer = canvas.toBuffer('image/jpeg', { quality: 0.6 });
+
+      return jpegBuffer;
+    } catch (error) {
+      console.error('[CensorshipAgent] Error converting frame to JPEG:', error);
+      throw error;
+    } finally {
+      // Clean up memory
+      if (rgbaFrame) {
+        rgbaFrame = null;
+      }
+      tempCanvas = null;
+      canvas = null;
+
+      // Force garbage collection hint
+      if (global.gc) {
+        global.gc();
+      }
     }
   }
 
@@ -462,9 +500,16 @@ class CensorshipAgent extends EventEmitter {
   async _sendToRunPod(sessionId, frameBuffer) {
     try {
       const formData = new FormData();
-      formData.append('frame_data', frameBuffer, {
+
+      // Convert buffer to stream for FormData
+      const stream = new Readable();
+      stream.push(frameBuffer);
+      stream.push(null);
+
+      formData.append('frame_data', stream, {
         filename: 'frame.jpg',
-        contentType: 'image/jpeg'
+        contentType: 'image/jpeg',
+        knownLength: frameBuffer.length
       });
 
       const response = await axios.post(
@@ -473,149 +518,175 @@ class CensorshipAgent extends EventEmitter {
         {
           params: { session_id: sessionId },
           headers: formData.getHeaders(),
-          timeout: 5000,
+          timeout: 30000, // 30 seconds for model warmup and processing
           maxContentLength: 100 * 1024 * 1024
         }
       );
 
       return response.data.detections || [];
     } catch (error) {
-      // Don't log every error, just count them
+      // Silently fail for individual frames to avoid log spam
+      if (error.response?.status !== 500) {
+        console.error('[CensorshipAgent] RunPod request failed:', error.message);
+      }
       return [];
     }
   }
 
   /**
-   * Apply censorship to canvas based on detections
+   * Initialize VideoSource and publish censored video track
    */
-  async _applyCensorship(canvas, ctx, detections) {
-    for (const detection of detections) {
-      const { bbox, type } = detection;
-      if (!bbox) continue;
-
-      const [x, y, width, height] = bbox;
-
-      switch (CENSORSHIP_MODE) {
-        case 'blur':
-          // Apply blur effect
-          this._applyBlur(ctx, x, y, width, height);
-          break;
-        case 'pixelate':
-          // Apply pixelation
-          this._applyPixelate(ctx, x, y, width, height);
-          break;
-        case 'overlay':
-          // Apply solid overlay
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-          ctx.fillRect(x, y, width, height);
-          break;
-      }
-    }
-  }
-
-  /**
-   * Apply blur effect to region
-   */
-  _applyBlur(ctx, x, y, width, height) {
-    // Get image data for region
-    const imageData = ctx.getImageData(x, y, width, height);
-    const pixels = imageData.data;
-
-    // Simple box blur
-    const blurRadius = 10;
-    const tempCanvas = createCanvas(width, height);
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.putImageData(imageData, 0, 0);
-
-    // Apply multiple blur passes
-    tempCtx.filter = `blur(${blurRadius}px)`;
-    tempCtx.drawImage(tempCanvas, 0, 0);
-
-    // Put blurred data back
-    ctx.putImageData(tempCtx.getImageData(0, 0, width, height), x, y);
-  }
-
-  /**
-   * Apply pixelation effect to region
-   */
-  _applyPixelate(ctx, x, y, width, height) {
-    const pixelSize = 10;
-    const imageData = ctx.getImageData(x, y, width, height);
-
-    // Downsample and upsample for pixelation effect
-    for (let py = 0; py < height; py += pixelSize) {
-      for (let px = 0; px < width; px += pixelSize) {
-        const i = (py * width + px) * 4;
-        const avgColor = [
-          imageData.data[i],
-          imageData.data[i + 1],
-          imageData.data[i + 2]
-        ];
-
-        // Fill pixel block
-        ctx.fillStyle = `rgb(${avgColor[0]}, ${avgColor[1]}, ${avgColor[2]})`;
-        ctx.fillRect(x + px, y + py, pixelSize, pixelSize);
-      }
-    }
-  }
-
-  /**
-   * Publish censored frame via data channel
-   * Optimized to reduce latency with quality/size tradeoffs
-   */
-  async _publishCensoredFrame(roomName, canvas) {
-    const roomInfo = this.activeRooms.get(roomName);
-    if (!roomInfo || !roomInfo.room) return;
-
-    try {
-      // Convert to JPEG with optimized quality setting
-      const frameBuffer = canvas.toBuffer('image/jpeg', { quality: FRAME_QUALITY });
-
-      // Encode censored frame as base64 for transmission
-      const censoredFrameData = {
-        type: 'censored_frame',
-        timestamp: Date.now(),
-        frameNumber: roomInfo.frameCount,
-        frame: frameBuffer.toString('base64')
-      };
-
-      // Send via data channel to all participants
-      // Use unreliable delivery for lower latency (real-time video tolerates some loss)
-      const encoder = new TextEncoder();
-      const data = encoder.encode(JSON.stringify(censoredFrameData));
-
-      await roomInfo.room.localParticipant.publishData(data, {
-        reliable: false, // Unreliable for lower latency
-        destinationIdentities: [] // Broadcast to all viewers
-      });
-
-    } catch (error) {
-      console.error(`[CensorshipAgent] ${roomName} - Error publishing censored frame:`, error.message);
-    }
-  }
-
-  /**
-   * Handle incoming data from participants
-   */
-  async _handleDataReceived(roomName, payload, participant) {
+  async _initializeVideoSource(roomName, width, height) {
     const roomInfo = this.activeRooms.get(roomName);
     if (!roomInfo) return;
 
     try {
-      // Decode data
-      const decoder = new TextDecoder();
-      const message = JSON.parse(decoder.decode(payload));
+      console.log(`[CensorshipAgent] ${roomName} - Initializing VideoSource (${width}x${height})`);
 
-      // Handle different message types
-      if (message.type === 'frame_data' && participant.identity.includes('broadcaster')) {
-        // Received frame data from broadcaster
-        // Decode base64 frame
-        const frameBuffer = Buffer.from(message.frame, 'base64');
-        await this._processReceivedFrame(roomName, frameBuffer);
-      }
+      // Create VideoSource for publishing censored frames
+      roomInfo.videoSource = new VideoSource(width, height);
+
+      // Create LocalVideoTrack from the source
+      const track = LocalVideoTrack.createVideoTrack('censored-video', roomInfo.videoSource);
+
+      // Configure publish options
+      const options = new TrackPublishOptions();
+      options.source = TrackSource.TRACK_SOURCE_CAMERA;
+
+      // Publish the censored video track
+      const publication = await roomInfo.room.localParticipant.publishTrack(track, options);
+      roomInfo.censoredTrack = track;
+
+      console.log(`[CensorshipAgent] ${roomName} - Published censored video track: ${publication.trackSid}`);
+
+      // Emit event
+      this.emit('censored-track:published', {
+        roomName,
+        trackSid: publication.trackSid
+      });
 
     } catch (error) {
-      // Likely binary data or non-JSON, ignore
+      console.error(`[CensorshipAgent] ${roomName} - Error initializing VideoSource:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Publish original frame (no detections)
+   */
+  async _publishOriginalFrame(roomName, frame) {
+    const roomInfo = this.activeRooms.get(roomName);
+    if (!roomInfo || !roomInfo.videoSource) return;
+
+    try {
+      // Capture the original frame to the VideoSource
+      roomInfo.videoSource.captureFrame(frame);
+    } catch (error) {
+      // Silently fail to avoid log spam
+    }
+  }
+
+  /**
+   * Apply blur to detected regions and publish censored frame
+   */
+  async _publishCensoredFrame(roomName, frame, detections) {
+    const roomInfo = this.activeRooms.get(roomName);
+    if (!roomInfo || !roomInfo.videoSource) return;
+
+    let rgbaFrame = null;
+    let canvas = null;
+
+    try {
+      // Convert frame to RGBA
+      rgbaFrame = frame.convert(VideoBufferType.RGBA);
+
+      // Create canvas for manipulation
+      canvas = createCanvas(frame.width, frame.height);
+      const ctx = canvas.getContext('2d');
+
+      // Put original image on canvas
+      const imageData = ctx.createImageData(frame.width, frame.height);
+      imageData.data.set(new Uint8ClampedArray(rgbaFrame.data));
+      ctx.putImageData(imageData, 0, 0);
+
+      // Apply blur to each detected region
+      for (const detection of detections) {
+        const { box, class: detectedClass } = detection;
+        if (box) {
+          // Coordinates are normalized [0-1], convert to pixels
+          const x = Math.floor(box[0] * frame.width);
+          const y = Math.floor(box[1] * frame.height);
+          const w = Math.floor(box[2] * frame.width);
+          const h = Math.floor(box[3] * frame.height);
+
+          // Extract the region
+          const regionData = ctx.getImageData(x, y, w, h);
+
+          // Apply strong blur effect (pixelation)
+          const pixelSize = 20;
+          for (let py = 0; py < h; py += pixelSize) {
+            for (let px = 0; px < w; px += pixelSize) {
+              // Get average color of pixelSize x pixelSize block
+              let r = 0, g = 0, b = 0, count = 0;
+              for (let by = 0; by < pixelSize && (py + by) < h; by++) {
+                for (let bx = 0; bx < pixelSize && (px + bx) < w; bx++) {
+                  const idx = ((py + by) * w + (px + bx)) * 4;
+                  r += regionData.data[idx];
+                  g += regionData.data[idx + 1];
+                  b += regionData.data[idx + 2];
+                  count++;
+                }
+              }
+              r = Math.floor(r / count);
+              g = Math.floor(g / count);
+              b = Math.floor(b / count);
+
+              // Fill block with average color
+              for (let by = 0; by < pixelSize && (py + by) < h; by++) {
+                for (let bx = 0; bx < pixelSize && (px + bx) < w; bx++) {
+                  const idx = ((py + by) * w + (px + bx)) * 4;
+                  regionData.data[idx] = r;
+                  regionData.data[idx + 1] = g;
+                  regionData.data[idx + 2] = b;
+                }
+              }
+            }
+          }
+
+          // Put blurred region back
+          ctx.putImageData(regionData, x, y);
+        }
+      }
+
+      // Get the censored image data
+      const censoredData = ctx.getImageData(0, 0, frame.width, frame.height);
+
+      // Create new VideoFrame from censored data
+      const censoredFrame = new VideoFrame(
+        new Uint8Array(censoredData.data.buffer),
+        frame.width,
+        frame.height,
+        VideoBufferType.RGBA
+      );
+
+      // Publish the censored frame
+      roomInfo.videoSource.captureFrame(censoredFrame);
+
+    } catch (error) {
+      console.error(`[CensorshipAgent] ${roomName} - Error applying censorship:`, error.message);
+      // Fallback to publishing original frame
+      try {
+        roomInfo.videoSource.captureFrame(frame);
+      } catch (fallbackError) {
+        // Silently fail
+      }
+    } finally {
+      // Cleanup
+      rgbaFrame = null;
+      canvas = null;
+      if (global.gc) {
+        global.gc();
+      }
     }
   }
 
@@ -624,36 +695,41 @@ class CensorshipAgent extends EventEmitter {
    */
   async disconnect(roomName) {
     const roomInfo = this.activeRooms.get(roomName);
+
     if (!roomInfo) {
-      console.log(`[CensorshipAgent] Not connected to ${roomName}`);
+      console.log(`[CensorshipAgent] No active connection for ${roomName}`);
       return { success: true };
     }
 
     try {
       console.log(`[CensorshipAgent] Disconnecting from ${roomName}`);
 
-      // Stop processing
-      if (roomInfo.processingInterval) {
-        clearInterval(roomInfo.processingInterval);
+      // Close video stream
+      if (roomInfo.videoStream) {
+        roomInfo.videoStream.close();
+      }
+
+      // Close video source
+      if (roomInfo.videoSource) {
+        await roomInfo.videoSource.close();
+      }
+
+      // Close censored track
+      if (roomInfo.censoredTrack) {
+        await roomInfo.censoredTrack.close(false); // Don't close source, already closed above
       }
 
       // Disconnect from room
       await roomInfo.room.disconnect();
 
+      // Calculate stats
       const stats = {
-        roomName,
-        duration: Date.now() - roomInfo.startedAt.getTime(),
-        framesProcessed: roomInfo.frameCount,
-        detectionsFound: roomInfo.detectionCount
+        frameCount: roomInfo.frameCount,
+        detectionCount: roomInfo.detectionCount,
+        duration: Date.now() - roomInfo.startedAt.getTime()
       };
 
-      this.activeRooms.delete(roomName);
-
-      console.log(`[CensorshipAgent] Disconnected from ${roomName}`);
-      console.log(`  - Frames processed: ${stats.framesProcessed}`);
-      console.log(`  - Detections: ${stats.detectionsFound}`);
-
-      this.emit('disconnected', stats);
+      this._cleanup(roomName);
 
       return {
         success: true,
@@ -662,7 +738,7 @@ class CensorshipAgent extends EventEmitter {
 
     } catch (error) {
       console.error(`[CensorshipAgent] Error disconnecting from ${roomName}:`, error);
-      this.activeRooms.delete(roomName);
+      this._cleanup(roomName);
       return {
         success: false,
         error: error.message
@@ -671,19 +747,29 @@ class CensorshipAgent extends EventEmitter {
   }
 
   /**
+   * Cleanup room resources
+   */
+  _cleanup(roomName) {
+    this.activeRooms.delete(roomName);
+    console.log(`[CensorshipAgent] Cleaned up resources for ${roomName}`);
+  }
+
+  /**
    * Get status for a room
    */
   getStatus(roomName) {
     const roomInfo = this.activeRooms.get(roomName);
-    if (!roomInfo) return null;
+
+    if (!roomInfo) {
+      return null;
+    }
 
     return {
       roomName,
-      connected: roomInfo.room.state === 'connected',
+      active: true,
       isProcessing: roomInfo.isProcessing,
-      framesProcessed: roomInfo.frameCount,
-      detectionsFound: roomInfo.detectionCount,
-      fps: PROCESSING_FPS,
+      frameCount: roomInfo.frameCount,
+      detectionCount: roomInfo.detectionCount,
       uptime: Date.now() - roomInfo.startedAt.getTime()
     };
   }

@@ -1,0 +1,126 @@
+name: "nudenet_trt"
+platform: "tensorrt_plan"
+max_batch_size: 8
+
+# Input: Video frame (downsampled to 320x180)
+input [
+  {
+    name: "input"
+    data_type: TYPE_FP32
+    dims: [ 3, 180, 320 ]  # [channels, height, width]
+  }
+]
+
+# Output: Detections [num_detections, 6]
+# Format: [x1, y1, x2, y2, class_id, confidence]
+output [
+  {
+    name: "output"
+    data_type: TYPE_FP32
+    dims: [ -1, 6 ]  # Variable number of detections
+  }
+]
+
+# Dynamic batching configuration
+dynamic_batching {
+  # Preferred batch sizes (powers of 2 for GPU efficiency)
+  preferred_batch_size: [ 4, 8 ]
+
+  # Maximum queue delay: 30ms (optimal from research)
+  max_queue_delay_microseconds: 30000
+
+  # Allow out-of-order responses for lower latency
+  preserve_ordering: false
+
+  # Priority levels (optional, for future use)
+  priority_levels: 2
+  default_priority_level: 1
+}
+
+# GPU instance configuration
+instance_group [
+  {
+    # Number of instances (3 prevents head-of-line blocking)
+    count: 3
+    kind: KIND_GPU
+    gpus: [ 0 ]  # Use GPU 0
+  }
+]
+
+# TensorRT-specific optimizations
+optimization {
+  execution_accelerators {
+    gpu_execution_accelerator [
+      {
+        name: "tensorrt"
+        parameters {
+          key: "precision_mode"
+          value: "FP16"  # FP16 for 3-5x speedup
+        }
+        parameters {
+          key: "max_workspace_size_bytes"
+          value: "2147483648"  # 2GB workspace
+        }
+        parameters {
+          key: "max_cached_engines"
+          value: "100"
+        }
+        parameters {
+          key: "minimum_segment_size"
+          value: "3"
+        }
+      }
+    ]
+  }
+
+  # Input/output memory optimizations
+  input_pinned_memory {
+    enable: true
+  }
+  output_pinned_memory {
+    enable: true
+  }
+}
+
+# Model warmup (prepare engine on startup)
+model_warmup [
+  {
+    name: "batch_1"
+    batch_size: 1
+    inputs {
+      key: "input"
+      value: {
+        data_type: TYPE_FP32
+        dims: [ 3, 180, 320 ]
+        zero_data: true
+      }
+    }
+  },
+  {
+    name: "batch_4"
+    batch_size: 4
+    inputs {
+      key: "input"
+      value: {
+        data_type: TYPE_FP32
+        dims: [ 3, 180, 320 ]
+        zero_data: true
+      }
+    }
+  },
+  {
+    name: "batch_8"
+    batch_size: 8
+    inputs {
+      key: "input"
+      value: {
+        data_type: TYPE_FP32
+        dims: [ 3, 180, 320 ]
+        zero_data: true
+      }
+    }
+  }
+]
+
+# Model versioning
+version_policy: { latest { num_versions: 1 } }
